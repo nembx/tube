@@ -1,0 +1,21 @@
+{
+    "api": "5",
+    "type": "anime",
+    "name": "yinghua",
+    "version": "1.3",
+    "muliSources": true,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "usePost": false,
+    "useLegacyParser": false,
+    "userAgent": "",
+    "adBlocker": true,
+    "baseURL": "https://www.yinghua2.com/",
+    "searchURL": "https://www.yinghua2.com/index.php/vod/search.html?wd=@keyword",
+    "searchList": "//ul[contains(@class,'stui-vodlist__media')]/li",
+    "searchName": "//h3[contains(@class,'title')]/a",
+    "searchResult": "//h3[contains(@class,'title')]/a",
+    "chapterRoads": "//ul[contains(@class,'stui-content__playlist')]",
+    "chapterResult": "//li/a",
+    "referer": "https://www.yinghua2.com/"
+}

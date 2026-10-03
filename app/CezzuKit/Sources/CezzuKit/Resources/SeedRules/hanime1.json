@@ -1,0 +1,31 @@
+{
+    "deprecated": true,
+    "api": "9",
+    "type": "anime",
+    "name": "hanime1",
+    "version": "1.0",
+    "muliSources": false,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "usePost": false,
+    "useLegacyParser": false,
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "adBlocker": true,
+    "baseURL": "https://hanime1.me/",
+    "searchURL": "https://hanime1.me/search?query=@keyword",
+    "searchList": "//div[@id='home-rows-wrapper']//a[.//div[contains(@class,'title')]]",
+    "searchName": ".//div[contains(@class,'title')]",
+    "searchResult": ".",
+    "chapterRoads": "//div[@id='playlist-scroll']",
+    "chapterResult": "//h4[contains(@class,'video-title')]/a",
+    "referer": "https://hanime1.me/",
+    "cookies": "quality=1080",
+    "videoURLPattern": "(vdownload|abre-videos|xvideos).*1080.*\\.(m3u8|mp4)",
+    "antiCrawlerConfig": {
+        "enabled": true,
+        "captchaType": 2,
+        "captchaImage": "",
+        "captchaInput": "",
+        "captchaButton": "//input[@type='button' and @value='Verify you are human'] | //div[@class='cf-turnstile'] | //*[@id='challenge-form']"
+    }
+}

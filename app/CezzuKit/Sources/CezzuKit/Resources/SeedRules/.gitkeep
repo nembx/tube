@@ -1,0 +1,3 @@
+# 这个目录由 cezzu/scripts/sync_seed_rules.sh 在 build 前填充。
+# 内容来自 cezzu-rule/rules/*.json + cezzu-rule/index.json。
+# 不要手动往里面塞东西。

@@ -1,0 +1,2 @@
+#include "Version-iOS.xcconfig"
+#include? "LocalSecrets.xcconfig"

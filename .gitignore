@@ -1,0 +1,75 @@
+# ─── macOS ───
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# ─── Swift Package Manager ───
+.build/
+.swiftpm/
+Packages/
+Package.pins
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# ─── Xcode ───
+## XcodeGen 生成物（source of truth 是 project.yml；workspace 由用户本地按 README 步骤创建）
+*.xcodeproj/
+*.xcworkspace/
+
+## Xcode 用户态（即使将来某个 .xcodeproj 入了 git 也要排除）
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+*.xccheckout
+*.moved-aside
+DerivedData/
+build/
+
+## Obj-C/Swift 临时文件
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ─── 测试/覆盖率 ───
+*.gcno
+*.gcda
+*.profraw
+*.profdata
+
+# ─── 编辑器 / IDE ───
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── 日志 / 临时文件 ───
+*.log
+tmp/
+.tmp/
+
+# ─── Release 构建 ───
+dist/
+.build-release/
+
+# ─── 本地密钥 / 凭据 ───
+app/LocalSecrets.xcconfig
+
+# ─── Claude Code ───
+## 全项目 skill 入口统一在 .agents/skills，.claude/skills 只是指向它的软链，需入库；
+## 其余都是本地态（settings.local.json / worktrees）。
+.claude/*
+!.claude/skills
+
+# ─── Antigravity CLI ───
+.antigravitycli/
+
+
+# Python 字节码（技能脚本跑过就会留下）
+__pycache__/
+*.pyc
+
+.tools/
+artifacts/
