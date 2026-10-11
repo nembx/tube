@@ -528,17 +528,6 @@ struct PlayerDetailPanel: View {
         return index
     }
 
-    /// 网格该滚到哪一格。当前段里没有正在播的那一集（用户翻到了别的段）时不滚。
-    private var episodeScrollTarget: String? {
-        guard model.tab == .episodes, let index = currentGridEpisodeIndex else { return nil }
-        let range = EpisodePagination.range(
-            page: effectiveEpisodePage,
-            episodeCount: model.currentEpisodes.count
-        )
-        guard range.contains(index) else { return nil }
-        return Self.episodeAnchor(index)
-    }
-
     /// 当前该显示的分段。用户点过段签就听他的，否则跟着正在播的那一集。
     private var effectiveEpisodePage: Int {
         if let episodePage {
@@ -615,11 +604,6 @@ struct PlayerDetailPanel: View {
                 }
             }
             .animation(.easeOut(duration: 0.18), value: showsBackToTop)
-            // 剧集一到位就把网格挪到正在播的那一集上；当前段里没有这一格时不动。
-            .onChange(of: episodeScrollTarget, initial: true) { _, target in
-                guard let target else { return }
-                scroller.scrollTo(target, anchor: .center)
-            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(palette.background)
