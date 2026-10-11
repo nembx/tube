@@ -525,11 +525,6 @@ public struct RegularDetailView: View {
                     .foregroundStyle(palette.textSecondary)
             }
 
-            WrapLayout(spacing: 16, lineSpacing: 8) {
-                statPill(title: "已选源", value: model.selectedSource?.ruleName ?? "暂无")
-                statPill(title: "线路", value: selectedRoadLabel)
-                statPill(title: "剧集", value: "\(model.currentEpisodes.count)")
-            }
         }
     }
 
@@ -592,18 +587,6 @@ public struct RegularDetailView: View {
             .animation(.easeOut(duration: 0.16), value: isFollowed)
         }
         .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private func statPill(title: String, value: String) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-                .foregroundStyle(palette.textTertiary)
-            Text(value)
-                .foregroundStyle(palette.textSecondary)
-                .lineLimit(1)
-        }
-        .font(.caption.weight(.bold))
     }
 
     private var selectedRoadLabel: String {
@@ -688,74 +671,24 @@ public struct RegularDetailView: View {
         .padding(.bottom, 96)
     }
 
+    /// 系统分段控件，和窄屏详情页、播放页面板一致。
     @ViewBuilder
     private func contentTabBar(width: CGFloat) -> some View {
-        // 能放下就贴合内容；放不下则钉死在内容区宽度内，tabs 在容器里横滚。
-        // 竖向 ScrollView 里若不限制，HStack ideal width 会把整页撑出屏宽。
-        let maxWidth = max(0, width)
-        ViewThatFits(in: .horizontal) {
-            tabBarTrack(scrolling: false)
-            tabBarTrack(scrolling: true)
-                .frame(width: maxWidth, alignment: .leading)
-                .clipShape(Capsule(style: .continuous))
-        }
-        .frame(maxWidth: maxWidth, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func tabBarTrack(scrolling: Bool) -> some View {
-        let tabs = HStack(spacing: 4) {
+        Picker(
+            "",
+            selection: Binding(
+                get: { model.selectedTab },
+                set: { tab in Task { await model.selectTab(tab) } }
+            )
+        ) {
             ForEach(DetailTab.tabBarCases, id: \.self) { tab in
-                tabBarItem(tab)
+                Text(tab.title).tag(tab)
             }
         }
-        .padding(5)
-
-        Group {
-            if scrolling {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    tabs
-                }
-            } else {
-                tabs
-            }
-        }
-        .background {
-            Capsule(style: .continuous)
-                .fill(palette.surface)
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(palette.hairline, lineWidth: 1)
-                }
-        }
-    }
-
-    @ViewBuilder
-    private func tabBarItem(_ tab: DetailTab) -> some View {
-        let selected = model.selectedTab == tab
-        Button {
-            Task { await model.selectTab(tab) }
-        } label: {
-            Text(tab.title)
-                .font(.subheadline.weight(selected ? .semibold : .medium))
-                .foregroundStyle(selected ? palette.textPrimary : palette.textTertiary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .frame(minHeight: 36)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(selected ? palette.surfaceRaised : Color.clear)
-                        .overlay {
-                            if selected {
-                                Capsule(style: .continuous)
-                                    .strokeBorder(palette.hairline, lineWidth: 1)
-                            }
-                        }
-                }
-                .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .animation(.easeOut(duration: 0.18), value: selected)
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .frame(maxWidth: min(max(0, width), 420), alignment: .leading)
+        .frame(maxWidth: max(0, width), alignment: .leading)
     }
 
     @ViewBuilder
@@ -821,12 +754,15 @@ public struct RegularDetailView: View {
 
             if !model.summary.isEmpty {
                 contentModule(eyebrow: "ABOUT", title: "简介") {
-                    ExpandableSummary(
-                        text: model.summary,
-                        collapsedLineLimit: 6,
-                        textColor: palette.textSecondary,
-                        accentColor: palette.textPrimary
-                    )
+                    card {
+                        ExpandableSummary(
+                            text: model.summary,
+                            collapsedLineLimit: 6,
+                            textColor: palette.textSecondary,
+                            accentColor: palette.textPrimary
+                        )
+                        .padding(18)
+                    }
                 }
             }
 
@@ -953,12 +889,17 @@ public struct RegularDetailView: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle(palette.textSecondary)
                         .lineLimit(1)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                         .background {
                             Capsule(style: .continuous)
                                 .fill(palette.surfaceRaised)
                         }
+                        .overlay {
+                            Capsule(style: .continuous)
+                                .strokeBorder(palette.hairline, lineWidth: 1)
+                        }
+                        .contentShape(Capsule(style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -969,119 +910,233 @@ public struct RegularDetailView: View {
 
     @ViewBuilder
     private var watchModule: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("WATCH")
-                        .font(.caption.weight(.semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(palette.textTertiary)
-                    Text("选集播放")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(palette.textPrimary)
-                }
+                Text("选集播放")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(palette.textPrimary)
                 Spacer(minLength: 12)
                 if !model.currentEpisodes.isEmpty {
-                    Text("\(model.currentEpisodes.count) 集")
-                        .font(.subheadline.weight(.medium))
+                    Text("共 \(model.currentEpisodes.count) 集")
+                        .font(.footnote)
                         .foregroundStyle(palette.textTertiary)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 20) {
-                sourceRail
+            VStack(alignment: .leading, spacing: 16) {
+                sourceCard
                 episodesContent
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
+    /// 分组卡片：和窄屏详情页、播放页面板同一套圆角、底色、描边。
+    private func cardShape() -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: RegularDetailLayout.moduleRadius, style: .continuous)
+    }
+
     @ViewBuilder
-    private var sourceRail: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("播放源")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(palette.textSecondary)
+    private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.surface, in: cardShape())
+            .overlay {
+                cardShape().strokeBorder(palette.hairline, lineWidth: 1)
+            }
+    }
 
-            if model.isSearchingSources && model.sources.isEmpty && model.blockedSources.isEmpty {
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("正在匹配可播放源…")
-                        .font(.subheadline)
-                        .foregroundStyle(palette.textTertiary)
+    private func cardDivider(inset: CGFloat = 16) -> some View {
+        Rectangle()
+            .fill(palette.hairline)
+            .frame(height: 1)
+            .padding(.leading, inset)
+    }
+
+    /// 播放源和线路做成一张分组卡里的两行，点行弹菜单。
+    @ViewBuilder
+    private var sourceCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            card {
+                VStack(spacing: 0) {
+                    sourceMenuRow
+                    if showsRoadMenu {
+                        cardDivider(inset: 46)
+                        roadMenuRow
+                    }
                 }
-                .padding(.vertical, 4)
-            } else if model.sources.isEmpty && model.blockedSources.isEmpty {
-                Label(model.sourceSearchFailed ?? "暂无可播放源", systemImage: "antenna.radiowaves.left.and.right.slash")
-                    .font(.subheadline)
-                    .foregroundStyle(palette.textTertiary)
-            } else {
-                SourceRail(
-                    groups: model.sourceGroups,
-                    blockedSources: model.blockedSources,
-                    selectedSourceID: model.selectedSource?.id,
-                    layout: .wrap,
-                    style: sourceRailStyle,
-                    onSelect: { id in Task { await model.selectSource(id) } },
-                    onUnblock: { model.openCaptcha(for: $0) }
-                )
+            }
 
+            VStack(alignment: .leading, spacing: 6) {
+                if model.isSearchingSources {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text(model.sources.isEmpty ? "正在匹配可播放源…" : "正在搜索更多播放源…")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(palette.textTertiary)
+                } else if model.sources.isEmpty && model.blockedSources.isEmpty {
+                    Label(
+                        model.sourceSearchFailed ?? "暂无可播放源",
+                        systemImage: "antenna.radiowaves.left.and.right.slash"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(palette.textTertiary)
+                }
+                if let selected = model.selectedSource, selected.variantLabel != selected.ruleName {
+                    Text("当前条目 · \(selected.variantLabel)")
+                        .font(.caption)
+                        .foregroundStyle(palette.textTertiary)
+                        .lineLimit(2)
+                }
                 if case .failed(let message) = model.selectedSourceState {
                     Label(message, systemImage: "exclamationmark.circle")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
             }
+            .padding(.horizontal, 4)
         }
     }
 
-    private var sourceRailStyle: SourceRailStyle {
-        SourceRailStyle(
-            textPrimary: palette.textPrimary,
-            textSecondary: palette.textSecondary,
-            textTertiary: palette.textTertiary,
-            selectedFill: palette.surfaceRaised,
-            fill: .clear,
-            hairline: palette.hairline
-        )
+    private var showsRoadMenu: Bool {
+        if case .loaded(let detail) = model.selectedSourceState { return detail.roads.count > 1 }
+        return false
+    }
+
+    @ViewBuilder
+    private var sourceMenuRow: some View {
+        Menu {
+            ForEach(model.sourceGroups) { group in
+                if group.sources.count == 1, let only = group.sources.first {
+                    Button {
+                        Task { await model.selectSource(only.id) }
+                    } label: {
+                        menuItemLabel(group.ruleName, isSelected: only.id == model.selectedSource?.id)
+                    }
+                } else {
+                    Menu(group.ruleName) {
+                        ForEach(group.sources) { source in
+                            Button {
+                                Task { await model.selectSource(source.id) }
+                            } label: {
+                                menuItemLabel(
+                                    source.variantLabel,
+                                    isSelected: source.id == model.selectedSource?.id
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if !model.blockedSources.isEmpty {
+                Section("需要人机校验") {
+                    ForEach(model.blockedSources) { blocked in
+                        Button {
+                            model.openCaptcha(for: blocked.ruleName)
+                        } label: {
+                            Label(blocked.ruleName, systemImage: "lock")
+                        }
+                    }
+                }
+            }
+        } label: {
+            settingRow(
+                title: "播放源",
+                value: model.selectedSource?.ruleName ?? "未选择",
+                systemImage: "square.stack.3d.up"
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .disabled(model.sourceGroups.isEmpty && model.blockedSources.isEmpty)
+    }
+
+    @ViewBuilder
+    private var roadMenuRow: some View {
+        if case .loaded(let detail) = model.selectedSourceState, detail.roads.count > 1 {
+            Menu {
+                ForEach(detail.roads.indices, id: \.self) { index in
+                    Button {
+                        model.selectRoad(index)
+                        episodePage = 0
+                    } label: {
+                        menuItemLabel(detail.roads[index].label, isSelected: model.selectedRoadIndex == index)
+                    }
+                }
+            } label: {
+                settingRow(title: "线路", value: selectedRoadLabel, systemImage: "arrow.triangle.branch")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+        }
+    }
+
+    @ViewBuilder
+    private func menuItemLabel(_ text: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(text, systemImage: "checkmark")
+        } else {
+            Text(text)
+        }
+    }
+
+    /// 设置风格的列表行：左图标 + 字段名，右侧当前值 + 「可切换」角标。
+    private func settingRow(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(palette.textSecondary)
+                .frame(width: 22)
+            Text(title)
+                .font(.body)
+                .foregroundStyle(palette.textPrimary)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.body)
+                .foregroundStyle(palette.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.textTertiary)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 46)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private var episodesContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("剧集")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(palette.textSecondary)
-
-            switch model.selectedSourceState {
-            case .idle:
-                contentInlineHint("请选择一个播放源")
-            case .loading:
-                HStack(spacing: 10) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("正在拉取剧集…")
-                        .font(.subheadline)
-                        .foregroundStyle(palette.textTertiary)
-                }
-            case .failed(let message):
-                VStack(alignment: .leading, spacing: 6) {
-                    Label("剧集加载失败", systemImage: "exclamationmark.triangle.fill")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.orange)
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(palette.textTertiary)
-                }
-            case .loaded(let detail):
-                episodeBrowser(detail: detail)
+        switch model.selectedSourceState {
+        case .idle:
+            contentInlineHint("请选择一个播放源")
+        case .loading:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("正在拉取剧集…")
+                    .font(.subheadline)
+                    .foregroundStyle(palette.textTertiary)
             }
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 6) {
+                Label("剧集加载失败", systemImage: "exclamationmark.triangle.fill")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(palette.textTertiary)
+            }
+        case .loaded:
+            episodeBrowser
         }
     }
 
     @ViewBuilder
-    private func episodeBrowser(detail: AnimeDetail) -> some View {
+    private var episodeBrowser: some View {
         let episodes = model.currentEpisodes
         let pageSize = 100
         let totalPages = max(1, (episodes.count + pageSize - 1) / pageSize)
@@ -1090,16 +1145,7 @@ public struct RegularDetailView: View {
         let pageEnd = min(pageStart + pageSize, episodes.count)
         let resumeIndex = resumeEpisodeIndex
 
-        VStack(alignment: .leading, spacing: 14) {
-            if detail.roads.count > 1 {
-                WrapLayout(spacing: 6, lineSpacing: 6) {
-                    ForEach(detail.roads.indices, id: \.self) { index in
-                        roadChip(label: detail.roads[index].label, index: index)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
+        VStack(alignment: .leading, spacing: 12) {
             if totalPages > 1 {
                 WrapLayout(spacing: 6, lineSpacing: 6) {
                     ForEach(0..<totalPages, id: \.self) { page in
@@ -1149,59 +1195,47 @@ public struct RegularDetailView: View {
     }
 
     @ViewBuilder
-    private func roadChip(label: String, index: Int) -> some View {
-        let isSelected = model.selectedRoadIndex == index
-        Button {
-            model.selectRoad(index)
-            episodePage = 0
-        } label: {
-            Text(label)
-                .font(.caption.weight(isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? palette.textPrimary : palette.textTertiary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background {
-                    Capsule(style: .continuous)
-                        .fill(isSelected ? palette.surfaceRaised : Color.clear)
-                }
-                .overlay {
-                    Capsule(style: .continuous)
-                        .strokeBorder(palette.hairline.opacity(isSelected ? 1 : 0.5), lineWidth: 1)
-                }
-                .contentShape(Capsule(style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
     private func pageChip(page: Int, start: Int, end: Int, isSelected: Bool) -> some View {
         Button {
             episodePage = page
         } label: {
             Text("\(start)–\(end)")
-                .font(.caption2.weight(.semibold).monospacedDigit())
+                .font(.caption.weight(.semibold).monospacedDigit())
                 .foregroundStyle(isSelected ? palette.textPrimary : palette.textTertiary)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 11)
                 .padding(.vertical, 6)
                 .background {
                     Capsule(style: .continuous)
-                        .fill(isSelected ? palette.surfaceRaised : Color.clear)
+                        .fill(isSelected ? palette.surfaceRaised : palette.surface)
+                }
+                .overlay {
+                    Capsule(style: .continuous)
+                        .strokeBorder(palette.hairline, lineWidth: isSelected ? 0 : 1)
                 }
                 .contentShape(Capsule(style: .continuous))
         }
         .buttonStyle(.plain)
     }
 
+    /// 剧集格：续播那一格实心强调并带 ▶，其它格浅底细描边 —— 和窄屏、播放页面板同款。
     @ViewBuilder
     private func episodeCell(episode: Episode, index: Int, isResume: Bool) -> some View {
-        VStack(spacing: 6) {
-            Text(episodeNumberLabel(for: episode, fallbackIndex: index))
-                .font(.caption2.weight(.bold).monospacedDigit())
-                .foregroundStyle(isResume ? TubeMonochrome.fill(for: colorScheme) : palette.textTertiary)
-                .tracking(0.4)
+        let shape = RoundedRectangle(cornerRadius: RegularDetailLayout.chipRadius, style: .continuous)
+        let fill = TubeMonochrome.fill(for: colorScheme)
+        VStack(spacing: 5) {
+            HStack(spacing: 4) {
+                if isResume {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                Text(episodeNumberLabel(for: episode, fallbackIndex: index))
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .tracking(0.4)
+            }
+            .foregroundStyle(isResume ? TubeMonochrome.onFill(for: colorScheme).opacity(0.85) : palette.textTertiary)
             Text(episode.title)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.textPrimary)
+                .foregroundStyle(isResume ? TubeMonochrome.onFill(for: colorScheme) : palette.textPrimary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity)
@@ -1209,28 +1243,16 @@ public struct RegularDetailView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, minHeight: 72)
-        .background {
-            RoundedRectangle(cornerRadius: RegularDetailLayout.chipRadius, style: .continuous)
-                .fill(
-                    isResume
-                        ? TubeMonochrome.fill(for: colorScheme).opacity(0.12)
-                        : palette.surfaceRaised
-                )
-        }
+        .background(isResume ? fill : palette.surface, in: shape)
         .overlay {
-            RoundedRectangle(cornerRadius: RegularDetailLayout.chipRadius, style: .continuous)
-                .strokeBorder(
-                    isResume
-                        ? TubeMonochrome.fill(for: colorScheme).opacity(0.55)
-                        : palette.hairline,
-                    lineWidth: 1
-                )
+            shape.strokeBorder(isResume ? Color.clear : palette.hairline, lineWidth: 1)
         }
         .overlay(alignment: .topTrailing) {
             if tracksBangumi, collections.isEpisodeWatched(subjectID: model.item.id, episodeIndex: index) {
                 BangumiEpisodeWatchedBadge()
             }
         }
+        .contentShape(shape)
         .contextMenu {
             if tracksBangumi {
                 let watched = collections.isEpisodeWatched(subjectID: model.item.id, episodeIndex: index)
@@ -1602,16 +1624,11 @@ public struct RegularDetailView: View {
         title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(eyebrow)
-                    .font(.caption.weight(.semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(palette.textTertiary)
-                Text(title)
-                    .font(.title2.weight(.bold))
-                    .foregroundStyle(palette.textPrimary)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            // `eyebrow` 保留参数以免改动调用点，不再渲染：章节只留中文标题。
+            Text(title)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(palette.textPrimary)
             content()
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
