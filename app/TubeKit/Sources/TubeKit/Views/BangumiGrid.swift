@@ -19,6 +19,26 @@ enum BangumiGridLayout {
         ]
     }
 
+    /// 窄屏（iPhone）固定 3 列。自适应那套在手机上只排得下 2 列，单卡被撑到 170–190pt，
+    /// 比首页横向行的 130pt 卡大一圈；3 列约 108–121pt，和首页一个量级。
+    /// 列间距沿用首页横向行的卡距，让两处节奏一致。
+    static let compactColumnCount: Int = 3
+    static let compactHorizontalSpacing: CGFloat = BangumiSectionLayout.cardSpacing
+    static let compactVerticalSpacing: CGFloat = 16
+
+    static var compactColumns: [GridItem] {
+        Array(
+            repeating: GridItem(.flexible(), spacing: compactHorizontalSpacing, alignment: .top),
+            count: compactColumnCount
+        )
+    }
+
+    /// 窄屏 3 列时单卡的宽度，给测试和预览估算用。
+    static func compactItemWidth(forWidth width: CGFloat) -> CGFloat {
+        let gaps = CGFloat(compactColumnCount - 1) * compactHorizontalSpacing
+        return max(0, (width - gaps) / CGFloat(compactColumnCount))
+    }
+
     /// 根据容器可用宽度估算列数（测试 / 调试用；真实布局交给 `GridItem.adaptive`）。
     ///
     /// 公式：`n * preferred + (n - 1) * spacing ≤ width`
@@ -39,6 +59,18 @@ public struct BangumiGrid<Footer: View>: View {
     private let onTapItem: (BangumiItem) -> Void
     private let onLoadMore: (BangumiItem) async -> Void
     private let footer: Footer
+    #if os(iOS)
+        @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// iPhone 走固定 3 列，iPad / Mac 仍按宽度自适应。
+    private var isCompact: Bool {
+        #if os(iOS)
+            return sizeClass == .compact
+        #else
+            return false
+        #endif
+    }
 
     public init(
         items: [BangumiItem],
@@ -53,11 +85,14 @@ public struct BangumiGrid<Footer: View>: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: BangumiGridLayout.verticalSpacing) {
+        let verticalSpacing = isCompact
+            ? BangumiGridLayout.compactVerticalSpacing
+            : BangumiGridLayout.verticalSpacing
+        VStack(alignment: .leading, spacing: verticalSpacing) {
             LazyVGrid(
-                columns: BangumiGridLayout.columns,
+                columns: isCompact ? BangumiGridLayout.compactColumns : BangumiGridLayout.columns,
                 alignment: .leading,
-                spacing: BangumiGridLayout.verticalSpacing
+                spacing: verticalSpacing
             ) {
                 ForEach(items) { item in
                     Button {

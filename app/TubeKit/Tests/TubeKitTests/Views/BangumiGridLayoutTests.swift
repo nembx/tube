@@ -65,4 +65,16 @@ struct BangumiGridLayoutTests {
         let cellWidth = (width - CGFloat(columns - 1) * spacing) / CGFloat(columns)
         #expect(cellWidth + 0.001 >= preferred)
     }
+
+    @Test("compact grid is a fixed 3-column layout sized close to the home row cards")
+    func compactColumns() {
+        #expect(BangumiGridLayout.compactColumns.count == 3)
+        #expect(BangumiGridLayout.compactHorizontalSpacing == BangumiSectionLayout.cardSpacing)
+        // iPhone 15/16（393pt）减去两侧 20pt 边距
+        let width393 = BangumiGridLayout.compactItemWidth(forWidth: 393 - 40)
+        #expect(width393 > 100 && width393 < 130)
+        // iPhone Plus / Max（430pt）
+        let width430 = BangumiGridLayout.compactItemWidth(forWidth: 430 - 40)
+        #expect(abs(width430 - BangumiSectionLayout.cardWidth) < 12)
+    }
 }
