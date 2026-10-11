@@ -570,10 +570,6 @@ struct PlayerDetailPanel: View {
                         .padding(.horizontal, 18)
                         .padding(.top, 16)
 
-                    episodeSummary(palette)
-                        .padding(.horizontal, 18)
-                        .padding(.top, 14)
-
                     Section {
                         // 内容不套一层 VStack：评论要按行摆进 LazyVStack 里，
                         // 包起来的话这一整屏评论会被一次性布局出来。
@@ -581,7 +577,7 @@ struct PlayerDetailPanel: View {
                     } header: {
                         tabBar(palette)
                             .padding(.horizontal, 18)
-                            .padding(.top, 16)
+                            .padding(.top, 14)
                             .padding(.bottom, 12)
                             // 钉住之后底下的内容会从它身后穿过去，得有不透明底色挡着。
                             .background(palette.background)
@@ -670,21 +666,139 @@ struct PlayerDetailPanel: View {
 
     // MARK: - 顶部
 
+    /// 卡片的圆角与描边：整块面板用同一套分组卡片语言（系统设置的 inset grouped 那种）。
+    private static let cardRadius: CGFloat = 16
+
+    private func cardShape() -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: Self.cardRadius, style: .continuous)
+    }
+
+    @ViewBuilder
+    private func card<Content: View>(_ palette: ContentPalette, @ViewBuilder content: () -> Content) -> some View {
+        content()
+            .background(palette.surface, in: cardShape())
+            .overlay {
+                cardShape().strokeBorder(palette.hairline, lineWidth: 1)
+            }
+    }
+
+    /// 「正在播放」卡：动态波形图标做状态标，番名、本集名、时长 / 首播分三级字重，
+    /// 简介收在同一张卡的下半截。原来这几行是散落在底色上的裸文本，没有层级。
     @ViewBuilder
     private func header(_ palette: ContentPalette) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("NOW PLAYING")
-                .font(.caption2.weight(.semibold))
-                .tracking(1.2)
-                .foregroundStyle(palette.textTertiary)
-            Text(activeRequest.anime.title)
-                .font(.title3.weight(.bold))
-                .foregroundStyle(palette.textPrimary)
-                .lineLimit(2)
+        card(palette) {
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "waveform")
+                            .symbolEffect(.variableColor.iterative, isActive: true)
+                        Text("正在播放")
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(palette.textTertiary)
+
+                    Text(activeRequest.anime.title)
+                        .font(.headline)
+                        .foregroundStyle(palette.textPrimary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    episodeHeadline(palette)
+                }
+                // 右上角是钉住的关闭键，标题不能压到它下面。
+                .padding(.trailing, onClose == nil ? 0 : 36)
+                .padding(16)
+
+                episodeDescription(palette)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        // 右上角是钉住的关闭键，标题不能压到它下面。
-        .padding(.trailing, onClose == nil ? 0 : 44)
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// 本集名 + 时长 / 首播。简介还没拉到时用占位，不让卡片高度来回跳。
+    @ViewBuilder
+    private func episodeHeadline(_ palette: ContentPalette) -> some View {
+        switch model.episodeInfoState {
+        case .idle, .loading:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("正在拉取本集信息…")
+            }
+            .font(.subheadline)
+            .foregroundStyle(palette.textTertiary)
+        case .unavailable:
+            Text(activeRequest.episode.title)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(palette.textSecondary)
+        case .failed(let message):
+            HStack(spacing: 10) {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("重试") {
+                    Task { await model.reloadEpisodeInfo() }
+                }
+                .buttonStyle(.plain)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(palette.textPrimary)
+            }
+        case .loaded(let episode):
+            VStack(alignment: .leading, spacing: 3) {
+                Text(episode.displayHeadline)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !metaLine(for: episode).isEmpty {
+                    Text(metaLine(for: episode))
+                        .font(.caption)
+                        .foregroundStyle(palette.textTertiary)
+                }
+            }
+        }
+    }
+
+    /// 简介：卡片下半截，和上面用一条内缩的细线分开；「展开」是带角标的小按钮。
+    @ViewBuilder
+    private func episodeDescription(_ palette: ContentPalette) -> some View {
+        if case .loaded(let episode) = model.episodeInfoState, !episode.desc.isEmpty {
+            Rectangle()
+                .fill(palette.hairline)
+                .frame(height: 1)
+                .padding(.leading, 16)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(episode.desc)
+                    .font(.callout)
+                    .foregroundStyle(palette.textSecondary)
+                    .lineLimit(isSummaryExpanded ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isSummaryExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 3) {
+                        Text(isSummaryExpanded ? "收起" : "展开")
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.bold))
+                            .rotationEffect(.degrees(isSummaryExpanded ? 180 : 0))
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(palette.textPrimary)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(16)
+        }
+    }
+
+    private func metaLine(for episode: BangumiEpisode) -> String {
+        var parts: [String] = []
+        if !episode.duration.isEmpty { parts.append("时长 \(episode.duration)") }
+        if !episode.airDate.isEmpty { parts.append("首播 \(episode.airDate)") }
+        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder
@@ -692,10 +806,10 @@ struct PlayerDetailPanel: View {
         Button(action: action) {
             Circle()
                 .fill(palette.surfaceRaised)
-                .frame(width: 34, height: 34)
+                .frame(width: 30, height: 30)
                 .overlay {
                     Image(systemName: "xmark")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.footnote.weight(.bold))
                         .foregroundStyle(palette.textSecondary)
                 }
                 .padding(4)
@@ -735,39 +849,23 @@ struct PlayerDetailPanel: View {
         .accessibilityLabel("回到顶部")
     }
 
-    /// 没有轨道、没有描边：选中项靠字重和一层极淡的底色区分 —— 和详情页 tab 栏同一套。
+    /// 系统分段控件。两个 tab 是并列的互斥视图，这正是 segmented control 的本职。
     @ViewBuilder
     private func tabBar(_ palette: ContentPalette) -> some View {
-        HStack(spacing: 6) {
+        Picker("", selection: $model.tab) {
             ForEach(PlayerDetailTab.allCases, id: \.self) { tab in
-                let selected = model.tab == tab
-                Button {
-                    model.tab = tab
-                } label: {
-                    Text(tab.title)
-                        .font(.subheadline.weight(selected ? .bold : .medium))
-                        .foregroundStyle(selected ? palette.textPrimary : palette.textTertiary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .frame(minHeight: 36)
-                        .background {
-                            Capsule(style: .continuous)
-                                .fill(selected ? palette.surfaceRaised : Color.clear)
-                        }
-                        .contentShape(Capsule(style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .animation(.easeOut(duration: 0.18), value: selected)
+                Text(tab.title).tag(tab)
             }
-            Spacer(minLength: 0)
         }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     @ViewBuilder
     private func content(_ palette: ContentPalette) -> some View {
         switch model.tab {
         case .episodes:
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 20) {
                 sourceAndLineRow(palette)
                 episodesSection(palette)
             }
@@ -779,117 +877,61 @@ struct PlayerDetailPanel: View {
         }
     }
 
-    // MARK: - 当前集简介
-
-    @ViewBuilder
-    private func episodeSummary(_ palette: ContentPalette) -> some View {
-        switch model.episodeInfoState {
-        case .idle, .loading:
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                Text("正在拉这一集的简介…")
-                    .font(.subheadline)
-                    .foregroundStyle(palette.textTertiary)
-            }
-        case .unavailable(let message):
-            hint(message, palette)
-        case .failed(let message):
-            HStack(spacing: 10) {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("重试") {
-                    Task { await model.reloadEpisodeInfo() }
-                }
-                .buttonStyle(.plain)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(palette.textPrimary)
-            }
-        case .loaded(let episode):
-            VStack(alignment: .leading, spacing: 8) {
-                Text(episode.displayHeadline)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(palette.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if !metaLine(for: episode).isEmpty {
-                    Text(metaLine(for: episode))
-                        .font(.footnote)
-                        .foregroundStyle(palette.textTertiary)
-                }
-
-                if !episode.desc.isEmpty {
-                    Text(episode.desc)
-                        .font(.callout)
-                        .foregroundStyle(palette.textSecondary)
-                        .lineLimit(isSummaryExpanded ? nil : 3)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Button(isSummaryExpanded ? "收起" : "展开") {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            isSummaryExpanded.toggle()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(palette.textTertiary)
-                }
-            }
-        }
-    }
-
-    private func metaLine(for episode: BangumiEpisode) -> String {
-        var parts: [String] = []
-        if !episode.duration.isEmpty { parts.append("时长 \(episode.duration)") }
-        if !episode.airDate.isEmpty { parts.append("首播 \(episode.airDate)") }
-        return parts.joined(separator: " · ")
-    }
-
     // MARK: - 选集
 
-    /// 播放源和线路各占一颗胶囊，点开是菜单。
+    /// 播放源和线路做成一张分组卡里的两行（系统设置那种列表行），点行弹菜单。
     ///
-    /// 原来两者都是铺开的胶囊列表 —— 源一多就能占掉四五行，把「选集」整个顶出屏幕。
-    /// 这两样本来就是「选一个」而不是「浏览一遍」，收成菜单更贴合。同一站点下的多个
-    /// 条目走二级菜单，层级跟数据本身一致。
+    /// 这两样本来就是「选一个」而不是「浏览一遍」，收成菜单最贴合；行式布局把字段名、
+    /// 当前值、可切换的角标按固定位置摆开，比胶囊里挤一串字清楚。
     @ViewBuilder
     private func sourceAndLineRow(_ palette: ContentPalette) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 面板可以窄到放不下两颗，那时让它们换行，而不是把名字挤没。
-            FlowLayout(horizontalSpacing: 10, verticalSpacing: 10) {
-                sourceMenu(palette)
-                lineMenu(palette)
-                if model.isSearchingSources {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("正在搜索播放源…")
-                            .font(.caption)
-                            .foregroundStyle(palette.textTertiary)
+        VStack(alignment: .leading, spacing: 8) {
+            card(palette) {
+                VStack(spacing: 0) {
+                    sourceMenu(palette)
+                    if showsLineMenu {
+                        Rectangle()
+                            .fill(palette.hairline)
+                            .frame(height: 1)
+                            .padding(.leading, 46)
+                        lineMenu(palette)
                     }
-                    .frame(height: menuPillHeight)
                 }
             }
 
-            // 同一站点下选的是哪个条目，胶囊里放不下，落在下面一行。
-            if let selected = model.selectedSource, selected.variantLabel != selected.ruleName {
-                Text("当前 · \(selected.variantLabel)")
+            // 卡片下面的脚注：同一站点下选的是哪个条目、搜索进度、错误。
+            VStack(alignment: .leading, spacing: 6) {
+                if model.isSearchingSources {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text("正在搜索更多播放源…")
+                    }
                     .font(.caption)
                     .foregroundStyle(palette.textTertiary)
-                    .lineLimit(2)
+                }
+                if let selected = model.selectedSource, selected.variantLabel != selected.ruleName {
+                    Text("当前条目 · \(selected.variantLabel)")
+                        .font(.caption)
+                        .foregroundStyle(palette.textTertiary)
+                        .lineLimit(2)
+                }
+                if let message = model.sourceSearchFailed {
+                    hint(message, palette)
+                }
+                if case .failed(let message) = model.selectedSourceState {
+                    Label(message, systemImage: "exclamationmark.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
             }
-
-            if let message = model.sourceSearchFailed {
-                hint(message, palette)
-            }
-            if case .failed(let message) = model.selectedSourceState {
-                Label(message, systemImage: "exclamationmark.circle")
-                    .font(.footnote)
-                    .foregroundStyle(.orange)
-            }
+            .padding(.horizontal, 4)
         }
+    }
+
+    /// 只有一条线路时不摆 —— 一个只能选当前项的菜单没有意义。
+    private var showsLineMenu: Bool {
+        if case .loaded(let detail) = model.selectedSourceState { return detail.roads.count > 1 }
+        return false
     }
 
     @ViewBuilder
@@ -930,7 +972,7 @@ struct PlayerDetailPanel: View {
                 }
             }
         } label: {
-            menuPill(
+            settingRow(
                 title: "播放源",
                 value: model.selectedSource?.ruleName ?? "未选择",
                 systemImage: "square.stack.3d.up",
@@ -943,7 +985,6 @@ struct PlayerDetailPanel: View {
         .disabled(model.sourceGroups.isEmpty && model.blockedSources.isEmpty)
     }
 
-    /// 只有一条线路时不摆 —— 一个只能选当前项的菜单没有意义。
     @ViewBuilder
     private func lineMenu(_ palette: ContentPalette) -> some View {
         if case .loaded(let detail) = model.selectedSourceState, detail.roads.count > 1 {
@@ -964,7 +1005,7 @@ struct PlayerDetailPanel: View {
                     }
                 }
             } label: {
-                menuPill(
+                settingRow(
                     title: "线路",
                     value: current,
                     systemImage: "arrow.triangle.branch",
@@ -987,53 +1028,52 @@ struct PlayerDetailPanel: View {
         }
     }
 
-    private var menuPillHeight: CGFloat { 34 }
-
-    /// 菜单胶囊：图标 + 字段名 + 当前值 + 下拉记号。字段名放进胶囊里，
-    /// 上面就不用再顶一行小标题。
-    private func menuPill(
+    /// 设置风格的列表行：左图标 + 字段名，右侧当前值 + 「可切换」角标。
+    private func settingRow(
         title: String,
         value: String,
         systemImage: String,
         palette: ContentPalette
     ) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(palette.textTertiary)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(palette.textSecondary)
+                .frame(width: 22)
 
             Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(palette.textTertiary)
+                .font(.body)
+                .foregroundStyle(palette.textPrimary)
+
+            Spacer(minLength: 12)
 
             Text(value)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(palette.textPrimary)
+                .font(.body)
+                .foregroundStyle(palette.textSecondary)
                 .lineLimit(1)
-                .truncationMode(.tail)
+                .truncationMode(.middle)
 
             Image(systemName: "chevron.up.chevron.down")
-                .font(.caption2.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(palette.textTertiary)
         }
         .padding(.horizontal, 14)
-        .frame(height: menuPillHeight)
-        .frame(maxWidth: 260, alignment: .leading)
-        .background {
-            Capsule(style: .continuous)
-                .fill(palette.surfaceRaised)
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .strokeBorder(palette.hairline, lineWidth: 1)
-        }
-        .contentShape(Capsule(style: .continuous))
+        .frame(minHeight: 46)
+        .contentShape(Rectangle())
     }
 
     @ViewBuilder
     private func episodesSection(_ palette: ContentPalette) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("选集", palette)
+            HStack(alignment: .firstTextBaseline) {
+                sectionTitle("选集", palette)
+                Spacer()
+                if case .loaded = model.selectedSourceState, !model.currentEpisodes.isEmpty {
+                    Text("共 \(model.currentEpisodes.count) 集")
+                        .font(.footnote)
+                        .foregroundStyle(palette.textTertiary)
+                }
+            }
 
             switch model.selectedSourceState {
             case .idle:
@@ -1066,23 +1106,28 @@ struct PlayerDetailPanel: View {
         let pageStart = pageRange.lowerBound
         let pageEnd = pageRange.upperBound
 
+        // 分段签横滚，不换行 —— 百集以上的番有十几段，铺开会把网格顶下去。
         if totalPages > 1 {
-            FlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
-                ForEach(0..<totalPages, id: \.self) { page in
-                    let start = page * pageSize + 1
-                    let end = min((page + 1) * pageSize, episodes.count)
-                    Button {
-                        episodePage = page
-                    } label: {
-                        pill("\(start)-\(end)", isSelected: safePage == page, palette: palette)
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    ForEach(0..<totalPages, id: \.self) { page in
+                        let start = page * pageSize + 1
+                        let end = min((page + 1) * pageSize, episodes.count)
+                        Button {
+                            episodePage = page
+                        } label: {
+                            pill("\(start)-\(end)", isSelected: safePage == page, palette: palette)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
         }
 
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 96, maximum: 140), spacing: 10)],
+            columns: [GridItem(.adaptive(minimum: 92, maximum: 140), spacing: 10)],
             spacing: 10
         ) {
             ForEach(Array(episodes[pageStart..<pageEnd].enumerated()), id: \.element.id) { pageIndex, episode in
@@ -1098,23 +1143,39 @@ struct PlayerDetailPanel: View {
                         onSelectRequest(request)
                     }
                 } label: {
-                    Text(episode.title)
-                        .font(.subheadline.weight(isCurrent ? .bold : .medium))
-                        .foregroundStyle(isCurrent ? palette.textPrimary : palette.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .padding(.horizontal, 8)
-                        .background {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(isCurrent ? palette.surfaceRaised : palette.surface)
-                        }
-                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    episodeCell(episode, isCurrent: isCurrent, palette: palette)
                 }
                 .buttonStyle(.plain)
                 .id(Self.episodeAnchor(absoluteIndex))
             }
         }
+    }
+
+    /// 剧集格：正在播的那一格实心强调并带播放图标，其它格浅底细描边。
+    /// 强调色沿用全 App 的单色体系（浅色黑 / 深色白），和详情页的播放键一致。
+    private func episodeCell(_ episode: Episode, isCurrent: Bool, palette: ContentPalette) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let fill = TubeMonochrome.fill(for: colorScheme)
+        return VStack(spacing: 4) {
+            if isCurrent {
+                Image(systemName: "play.fill")
+                    .font(.caption2.weight(.bold))
+            }
+            Text(episode.title)
+                .font(.subheadline.weight(isCurrent ? .bold : .medium))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+        }
+        .foregroundStyle(isCurrent ? TubeMonochrome.onFill(for: colorScheme) : palette.textPrimary)
+        .frame(maxWidth: .infinity, minHeight: 54)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(isCurrent ? fill : palette.surface, in: shape)
+        .overlay {
+            shape.strokeBorder(isCurrent ? Color.clear : palette.hairline, lineWidth: 1)
+        }
+        .contentShape(shape)
+        .animation(.easeOut(duration: 0.18), value: isCurrent)
     }
 
     // MARK: - 评论
