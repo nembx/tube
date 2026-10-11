@@ -57,6 +57,8 @@ Mac 产物仅做本地 ad-hoc 签名，未公证；面向其他用户分发需 D
 
 `.github/workflows/build.yml` 在推送 `main`、打 `v*` tag 或手动触发时，于 `macos-26` runner 上跑单元测试并打包：未签名 IPA 与 ad-hoc 签名的 DMG 作为 workflow 产物上传；打 tag 时额外创建 GitHub Release 并附上两者。凭证通过仓库 Secrets 注入（`DANDANPLAY_APP_ID` / `DANDANPLAY_APP_SECRET` / `BANGUMI_CLIENT_ID` / `BANGUMI_CLIENT_SECRET`），未配置时对应功能入口不可用，其余照常。
 
+发版：`bash scripts/bump_version.sh 0.2.0` 改 `version.json` 并重新生成 xcconfig，提交后打 `v0.2.0` tag 推送即可。CI 会校验 tag 与 `version.json` 一致，并用 run number 作为 build 号（本地构建仍用 `version.json` 里的 build）。
+
 ## 弹幕凭证
 
 仓库不包含 DanDanPlay AppID / AppSecret。可在「设置 → DanDanPlay 凭证」填入自己申请的凭证，或复制 `app/LocalSecrets.example.xcconfig` 为 `app/LocalSecrets.xcconfig` 后填写。后者已被 Git 忽略。未配置时仍可使用搜索、收藏和视频播放，在线弹幕无法正常拉取。

@@ -22,6 +22,12 @@ IOS_BUILD=$(python3 -c "import json; print(json.load(open('$VERSION_FILE'))['ios
 MACOS_VERSION=$(python3 -c "import json; print(json.load(open('$VERSION_FILE'))['macos']['version'])")
 MACOS_BUILD=$(python3 -c "import json; print(json.load(open('$VERSION_FILE'))['macos']['build'])")
 
+# CI 用 run number 覆盖 build 号：每次构建递增且不重复。本地不设就用 version.json 的值。
+if [[ -n "${BUILD_NUMBER_OVERRIDE:-}" ]]; then
+  IOS_BUILD="$BUILD_NUMBER_OVERRIDE"
+  MACOS_BUILD="$BUILD_NUMBER_OVERRIDE"
+fi
+
 # 生成 xcconfig
 cat > "$REPO_ROOT/app/Version-iOS.xcconfig" << EOF
 // Auto-generated from version.json — do not edit manually

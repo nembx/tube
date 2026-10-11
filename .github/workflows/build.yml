@@ -78,11 +78,20 @@ jobs:
         run: |
           KEY=$([ "${{ matrix.target }}" = ios ] && echo ios || echo macos)
           VERSION=$(python3 -c "import json;print(json.load(open('version.json'))['$KEY']['version'])")
-          BUILD=$(python3 -c "import json;print(json.load(open('version.json'))['$KEY']['build'])")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+          # 打 tag 发版时，tag 必须和 version.json 一致，否则 Release 会挂错版本号的包。
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/v}"
+            if [[ "$TAG" != "$VERSION" ]]; then
+              echo "::error::tag v$TAG 与 version.json 的 $VERSION 不一致，请先执行 scripts/bump_version.sh $TAG" >&2
+              exit 1
+            fi
+          fi
 
+      # build 号用 run number：每次 CI 构建递增且不重复；本地构建仍用 version.json 里的值。
       - name: 构建
+        env:
+          BUILD_NUMBER_OVERRIDE: ${{ github.run_number }}
         run: bash scripts/build.sh ${{ matrix.target }}
 
       - name: 打包 IPA
