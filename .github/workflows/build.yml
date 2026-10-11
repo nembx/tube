@@ -1,0 +1,128 @@
+name: Build
+
+# 推 main / 打 v* tag / 手动触发时打包：
+#   - iOS：未签名 IPA（安装前需自行签名）
+#   - macOS：ad-hoc 签名的 Tube.app 封成 DMG（未公证）
+# 打 tag 时额外发一条 GitHub Release 并附上两个产物。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # 工程要求 Xcode 26+（Swift 6.2）。runner 上装了多个版本时挑最新的 26。
+  XCODE_GLOB: /Applications/Xcode_26*.app
+
+jobs:
+  test:
+    name: 单元测试
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: 选择 Xcode
+        run: |
+          XCODE=$(ls -d $XCODE_GLOB 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          # build.sh 会优先用 /Applications/Xcode.app，这里显式钉住选中的那份。
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+      - name: swift test
+        run: bash scripts/build.sh test
+
+  build:
+    name: 打包 ${{ matrix.target }}
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ios, macos]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 选择 Xcode
+        run: |
+          XCODE=$(ls -d $XCODE_GLOB 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          # build.sh 会优先用 /Applications/Xcode.app，这里显式钉住选中的那份。
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      # 凭证走仓库 Secrets，没配就留空：DanDanPlay 弹幕和 Bangumi OAuth 入口会不可用，
+      # 其它功能不受影响。回调地址固定在 project.yml，不从这里传。
+      - name: 写入本地凭证
+        env:
+          DANDANPLAY_APP_ID: ${{ secrets.DANDANPLAY_APP_ID }}
+          DANDANPLAY_APP_SECRET: ${{ secrets.DANDANPLAY_APP_SECRET }}
+          BANGUMI_CLIENT_ID: ${{ secrets.BANGUMI_CLIENT_ID }}
+          BANGUMI_CLIENT_SECRET: ${{ secrets.BANGUMI_CLIENT_SECRET }}
+        run: |
+          cat > app/LocalSecrets.xcconfig <<EOF
+          DANDANPLAY_APP_ID = ${DANDANPLAY_APP_ID}
+          DANDANPLAY_APP_SECRET = ${DANDANPLAY_APP_SECRET}
+          BANGUMI_CLIENT_ID = ${BANGUMI_CLIENT_ID}
+          BANGUMI_CLIENT_SECRET = ${BANGUMI_CLIENT_SECRET}
+          EOF
+
+      - name: 读取版本号
+        id: version
+        run: |
+          KEY=$([ "${{ matrix.target }}" = ios ] && echo ios || echo macos)
+          VERSION=$(python3 -c "import json;print(json.load(open('version.json'))['$KEY']['version'])")
+          BUILD=$(python3 -c "import json;print(json.load(open('version.json'))['$KEY']['build'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD" >> "$GITHUB_OUTPUT"
+
+      - name: 构建
+        run: bash scripts/build.sh ${{ matrix.target }}
+
+      - name: 打包 IPA
+        if: matrix.target == 'ios'
+        run: |
+          mkdir -p dist
+          mv artifacts/Tube-ios-unsigned.ipa \
+            "dist/Tube-${{ steps.version.outputs.version }}-ios-unsigned.ipa"
+
+      - name: 打包 DMG
+        if: matrix.target == 'macos'
+        run: |
+          mkdir -p dist dmg-stage
+          ditto artifacts/macos/Build/Products/Release/Tube.app dmg-stage/Tube.app
+          ln -s /Applications dmg-stage/Applications
+          hdiutil create -volname "Tube" -srcfolder dmg-stage -ov -format UDZO \
+            "dist/Tube-${{ steps.version.outputs.version }}-macos.dmg"
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tube-${{ matrix.target }}-${{ steps.version.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: 发布 Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            - `*-ios-unsigned.ipa`：未签名，安装前需自行签名（如 Sideloadly / AltStore / 自己的开发者证书）。
+            - `*-macos.dmg`：本地 ad-hoc 签名、未公证。首次打开若被拦截，在「系统设置 → 隐私与安全性」里允许，或执行 `xattr -dr com.apple.quarantine /Applications/Tube.app`。
