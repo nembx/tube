@@ -1,5 +1,5 @@
 import AppKit
-import CezzuKit
+import TubeKit
 import SwiftUI
 
 struct PlayerKeyboardInteractionOverlay: NSViewRepresentable {

@@ -1,4 +1,6 @@
-import CezzuKit
+// xcode: set sdk=iOS
+
+import TubeKit
 import SwiftUI
 
 struct PlayerInteractionOverlay: View {

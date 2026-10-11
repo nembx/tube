@@ -15,7 +15,7 @@ esac
 bash "$ROOT/scripts/sync_version.sh"
 bash "$ROOT/app/scripts/sync_seed_rules.sh"
 if [[ "$MODE" == test ]]; then
-  exec swift test --package-path "$ROOT/app/CezzuKit"
+  exec swift test --package-path "$ROOT/app/TubeKit"
 fi
 "$XCODEGEN" generate --spec "$ROOT/app/project.yml"
 [[ "$MODE" == project ]] && exit 0
@@ -33,7 +33,7 @@ xcodebuild build -project "$ROOT/app/Tube.xcodeproj" -scheme "$SCHEME" \
 
 if [[ "$MODE" == macos ]]; then
   APP="$ROOT/artifacts/macos/Build/Products/Release/Tube.app"
-  codesign --force --deep --sign - --entitlements "$ROOT/app/Tube-macOS/Cezzu_macOS.entitlements" "$APP"
+  codesign --force --deep --sign - --entitlements "$ROOT/app/Tube-macOS/Tube_macOS.entitlements" "$APP"
   echo "Built: $APP (local ad-hoc signature)"
 elif [[ "$MODE" == ios ]]; then
   STAGE=$(mktemp -d "$ROOT/artifacts/ios/ipa.XXXXXX")

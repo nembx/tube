@@ -4,7 +4,7 @@
 
 ## 已验证
 
-- `swift test --package-path app/CezzuKit` 退出码为 0，Swift Testing 汇总为 749 tests / 120 suites。上游已有的 16 项 SwiftData 测试因命令行 runner 限制被跳过，未计作本次已验证的数据库行为。
+- `swift test --package-path app/TubeKit` 退出码为 0，Swift Testing 汇总为 749 tests / 120 suites。上游已有的 16 项 SwiftData 测试因命令行 runner 限制被跳过，未计作本次已验证的数据库行为。
 - `Tube-macOS` Release 构建成功，保留网络客户端、服务器和用户选择文件的沙盒 entitlement，并完成本地 ad-hoc 签名。应用已实际启动，进程保持运行。
 - `Tube-iOS` Release 真机目标构建成功，输出 `artifacts/Tube-ios-unsigned.ipa`。已检查 IPA 中 `Payload/Tube.app`、Info.plist 和开源许可资源。
 - `Tube-iOS` Debug 模拟器目标构建成功，并在 iPhone 18 Pro / iOS 27 模拟器安装启动。截图确认首页、Bangumi 实时推荐、封面、评分与底部导航成功显示。

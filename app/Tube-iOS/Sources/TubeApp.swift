@@ -1,4 +1,4 @@
-import CezzuKit
+import TubeKit
 import AVKit
 import SwiftUI
 import UIKit
@@ -21,7 +21,7 @@ struct TubeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            CezzuRoot()
+            TubeRoot()
                 // 全屏播放时藏起系统装饰。想看时间信号从屏幕顶边下滑，
                 // 系统会自己把状态栏临时唤出来 —— 这是 iOS 对隐藏状态栏的既定行为。
                 .statusBarHidden(orientation.isImmersivePlayback)

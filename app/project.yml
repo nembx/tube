@@ -16,11 +16,15 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: NO  # 让 sync_seed_rules.sh 能读 ../cezzu-rule/
     DANDANPLAY_APP_ID: ""
     DANDANPLAY_APP_SECRET: ""
+    # Bangumi OAuth 应用凭证（可选）。留空时设置页只保留「粘贴 Access Token」登录。
+    BANGUMI_CLIENT_ID: ""
+    BANGUMI_CLIENT_SECRET: ""
+    BANGUMI_REDIRECT_URI: "nembx-tube://bangumi-auth"
 
-# SwiftPM 包依赖：本地 CezzuKit
+# SwiftPM 包依赖：本地 TubeKit
 packages:
-  CezzuKit:
-    path: CezzuKit
+  TubeKit:
+    path: TubeKit
 
 # ============================================================
 # Targets
@@ -63,11 +67,19 @@ targets:
               NSIncludesSubdomains: true
         DanDanPlayAppID: "$(DANDANPLAY_APP_ID)"
         DanDanPlayAppSecret: "$(DANDANPLAY_APP_SECRET)"
+        BangumiClientID: "$(BANGUMI_CLIENT_ID)"
+        BangumiClientSecret: "$(BANGUMI_CLIENT_SECRET)"
+        BangumiRedirectURI: "$(BANGUMI_REDIRECT_URI)"
+        # OAuth 回调走自定义 scheme，ASWebAuthenticationSession 靠它把授权码送回来。
+        CFBundleURLTypes:
+          - CFBundleURLName: com.nembx.tube.bangumi-auth
+            CFBundleURLSchemes:
+              - nembx-tube
     settings:
       base:
         PRODUCT_NAME: Tube
         PRODUCT_BUNDLE_IDENTIFIER: com.nembx.tube.iOS
-        CODE_SIGN_ENTITLEMENTS: Tube-iOS/Cezzu_iOS.entitlements
+        CODE_SIGN_ENTITLEMENTS: Tube-iOS/Tube_iOS.entitlements
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: YES
@@ -75,8 +87,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
-      - package: CezzuKit
-        product: CezzuKit
+      - package: TubeKit
+        product: TubeKit
     preBuildScripts:
       - name: Sync seed rules from cezzu-rule/
         script: |
@@ -110,11 +122,18 @@ targets:
               NSIncludesSubdomains: true
         DanDanPlayAppID: "$(DANDANPLAY_APP_ID)"
         DanDanPlayAppSecret: "$(DANDANPLAY_APP_SECRET)"
+        BangumiClientID: "$(BANGUMI_CLIENT_ID)"
+        BangumiClientSecret: "$(BANGUMI_CLIENT_SECRET)"
+        BangumiRedirectURI: "$(BANGUMI_REDIRECT_URI)"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.nembx.tube.bangumi-auth
+            CFBundleURLSchemes:
+              - nembx-tube
     settings:
       base:
         PRODUCT_NAME: Tube
         PRODUCT_BUNDLE_IDENTIFIER: com.nembx.tube.macOS
-        CODE_SIGN_ENTITLEMENTS: Tube-macOS/Cezzu_macOS.entitlements
+        CODE_SIGN_ENTITLEMENTS: Tube-macOS/Tube_macOS.entitlements
         CODE_SIGN_STYLE: Automatic
         ENABLE_HARDENED_RUNTIME: YES
         ENABLE_PREVIEWS: YES
@@ -122,8 +141,8 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
-      - package: CezzuKit
-        product: CezzuKit
+      - package: TubeKit
+        product: TubeKit
     preBuildScripts:
       - name: Sync seed rules from cezzu-rule/
         script: |

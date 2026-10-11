@@ -3,14 +3,14 @@
 # sync_seed_rules.sh
 #
 # 把 cezzu-rule/ 里的 rules/*.json 与 index.json 复制进
-# CezzuKit/Sources/CezzuKit/Resources/SeedRules/，作为 App 的离线启动种子。
+# TubeKit/Sources/TubeKit/Resources/SeedRules/，作为 App 的离线启动种子。
 #
 # 这个脚本应该在每次 build 前运行 —— Xcode 的 App target 在 Build Phases
 # 顶部加一个 "Run Script" pre-build 阶段调用它即可。
 #
 # 用法：
 #   ${SRCROOT}/../scripts/sync_seed_rules.sh
-#   （或在 cezzu/ 目录下：./scripts/sync_seed_rules.sh）
+#   （或在 app/ 目录下：./scripts/sync_seed_rules.sh）
 #
 # 失败语义：找不到 cezzu-rule/ 时打印明确错误并退出非零，build 因此停下。
 
@@ -21,7 +21,7 @@ CEZZU_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$CEZZU_ROOT/.." && pwd)"
 
 CEZZU_RULE_DIR="$REPO_ROOT/cezzu-rule"
-SEED_DST="$CEZZU_ROOT/CezzuKit/Sources/CezzuKit/Resources/SeedRules"
+SEED_DST="$CEZZU_ROOT/TubeKit/Sources/TubeKit/Resources/SeedRules"
 
 if [ ! -d "$CEZZU_RULE_DIR" ]; then
     echo "error: cezzu-rule/ not found at $CEZZU_RULE_DIR" >&2

@@ -10,6 +10,7 @@
 
 - Bangumi 搜索、推荐、番剧详情、评分与标签。
 - 本地追番收藏、观看历史与断点续播。
+- 可选登录 Bangumi 账户：同步想看 / 在看 / 看过等收藏状态，看完一集自动标记看过，追番页按状态筛选。
 - 多视频源、线路与剧集切换，订阅和导入兼容 Kazumi / Cezzu 的规则。
 - AVPlayer 播放、倍速、后台音频、iOS 画中画与 AirPlay。
 - DanDanPlay 弹幕及字号、透明度、区域、密度等设置。
@@ -17,7 +18,7 @@
 - iPhone 底部导航、iPad 自适应布局、Mac 原生窗口和播放快捷键。
 - 深浅色主题；iOS 26 / macOS 26 起启用 Liquid Glass，旧系统回退到 Material。
 
-最低支持 **iOS 17 / macOS 14**。无登录、无自建后端；收藏与历史保存在本机，当前不提供 iCloud 同步。视频源、Bangumi 和弹幕的可用性取决于第三方服务及网络。
+最低支持 **iOS 17 / macOS 14**。无自建后端；收藏与历史保存在本机，当前不提供 iCloud 同步。Bangumi 登录为可选项，不登录时所有功能照常可用。视频源、Bangumi 和弹幕的可用性取决于第三方服务及网络。
 
 ## 开发与运行
 
@@ -52,9 +53,22 @@ bash scripts/build.sh ios        # iPhone / iPad 未签名 IPA
 
 Mac 产物仅做本地 ad-hoc 签名，未公证；面向其他用户分发需 Developer ID 签名和公证。App Store / TestFlight 发布需使用自己的 Apple Developer 账号归档上传。
 
+### GitHub Actions
+
+`.github/workflows/build.yml` 在推送 `main`、打 `v*` tag 或手动触发时，于 `macos-26` runner 上跑单元测试并打包：未签名 IPA 与 ad-hoc 签名的 DMG 作为 workflow 产物上传；打 tag 时额外创建 GitHub Release 并附上两者。凭证通过仓库 Secrets 注入（`DANDANPLAY_APP_ID` / `DANDANPLAY_APP_SECRET` / `BANGUMI_CLIENT_ID` / `BANGUMI_CLIENT_SECRET`），未配置时对应功能入口不可用，其余照常。
+
 ## 弹幕凭证
 
 仓库不包含 DanDanPlay AppID / AppSecret。可在「设置 → DanDanPlay 凭证」填入自己申请的凭证，或复制 `app/LocalSecrets.example.xcconfig` 为 `app/LocalSecrets.xcconfig` 后填写。后者已被 Git 忽略。未配置时仍可使用搜索、收藏和视频播放，在线弹幕无法正常拉取。
+
+## Bangumi 账户
+
+「设置 → Bangumi 账户」支持两种登录方式：
+
+- **Access Token**：在 <https://next.bgm.tv/demo/access-token> 生成个人令牌后粘贴，零配置可用。令牌到期需重新粘贴。
+- **OAuth 授权**：在 <https://bgm.tv/dev/app> 注册应用，回调地址填 `nembx-tube://bangumi-auth`，把 `BANGUMI_CLIENT_ID` / `BANGUMI_CLIENT_SECRET` 写进 `app/LocalSecrets.xcconfig` 后重新生成工程。配置后设置页出现「用 Bangumi 账号登录」，令牌会自动续期。
+
+令牌只存本机钥匙串。登录后：详情页的「追番」按钮变为收藏状态菜单（想看 / 在看 / 看过 / 搁置 / 抛弃）；剧集格子显示已看标记，长按可手动标记；播放进度过了「90% 或剩余不足 100 秒」（取先到者，与 animeko 一致）即自动标记该集为看过，并把「想看」升为「在看」（可在设置里关闭）。Bangumi 上的收藏会并入本机追番列表，本机原有收藏不会被删除。
 
 ## 工程结构
 
@@ -62,13 +76,13 @@ Mac 产物仅做本地 ad-hoc 签名，未公证；面向其他用户分发需 D
 app/project.yml       XcodeGen 工程定义
 app/Tube-iOS/         iPhone / iPad 入口与资源
 app/Tube-macOS/       Mac 入口与资源
-app/CezzuKit/         共享 SwiftUI、播放、规则、存储及测试
+app/TubeKit/         共享 SwiftUI、播放、规则、存储及测试
 cezzu-rule/           内置规则与订阅索引
 vendor/Anime4K/       着色器来源及许可证
 scripts/             工程生成、构建、版本及图标脚本
 ```
 
-共享库保留 `CezzuKit` 名称，便于追溯来源与合并上游更新。`app/project.yml` 为工程配置来源，生成的 `.xcodeproj` 不入库。版本统一由 `version.json` 管理。
+共享库 `TubeKit` 承载全部跨平台逻辑；上游 Cezzu 的对应模块名为 `CezzuKit`，合并上游改动时按此对应。`app/project.yml` 为工程配置来源，生成的 `.xcodeproj` 不入库。版本统一由 `version.json` 管理。
 
 默认规则订阅指向本仓库 `main/cezzu-rule/`，也保留可选 ghfast 镜像；内置规则随应用打包，首次启动无需下载规则清单。规则内容继承自上游，第三方站点是否可播放需以实际访问为准。
 

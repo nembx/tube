@@ -2,7 +2,7 @@
 """把 vendored 的 Anime4K GLSL 着色器翻译成 Metal Shading Language。
 
 输入：`vendor/Anime4K/glsl/*.glsl`（mpv user-shader 格式）
-输出：`cezzu/CezzuKit/Sources/CezzuKit/Resources/Anime4K/`
+输出：`app/TubeKit/Sources/TubeKit/Resources/Anime4K/`
       ├── <ShaderID>.metal   每个 pass 一个 compute kernel
       └── manifest.json      pass 元数据（Swift 侧的 Anime4KShaderCatalog 读它）
 
@@ -49,7 +49,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GLSL_DIR = REPO_ROOT / "vendor" / "Anime4K" / "glsl"
-OUT_DIR = REPO_ROOT / "cezzu" / "CezzuKit" / "Sources" / "CezzuKit" / "Resources" / "Anime4K"
+OUT_DIR = REPO_ROOT / "app" / "TubeKit" / "Sources" / "TubeKit" / "Resources" / "Anime4K"
 
 # 一个 pass 最多能绑几张纹理。A4KUniforms 里的数组长度要和它一致，
 # Swift 侧 Anime4KPassUniforms 也是。当前 Anime4K 的 M 档最宽一层绑 8 张（Restore_CNN_M 的最后一个 conv）。
@@ -332,7 +332,7 @@ kernel void {p.function}(
 
 
 def prelude(source_name: str) -> str:
-    return f"""// 本文件由 cezzu/scripts/generate_anime4k_shaders.py 自动生成 —— 不要手改。
+    return f"""// 本文件由 app/scripts/generate_anime4k_shaders.py 自动生成 —— 不要手改。
 // 源：vendor/Anime4K/glsl/{source_name}
 // 上游 Anime4K 由 bloc97 以 MIT 许可发布，见 vendor/Anime4K/LICENSE。
 

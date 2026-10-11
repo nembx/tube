@@ -1,19 +1,21 @@
-import CezzuKit
+import TubeKit
 import AppKit
 import SwiftUI
 
 @main
 struct TubeApp: App {
     /// macOS App 持有唯一 session，所有窗口（主窗口 + 独立播放器窗口）共享同一份 store / history。
-    /// 启动时为 nil，加载完成后再注入，避免 CezzuRoot 长时间卡在 empty fallback 导致无规则/无播源。
-    @State private var session: CezzuSession?
+    /// 启动时为 nil，加载完成后再注入，避免 TubeRoot 长时间卡在 empty fallback 导致无规则/无播源。
+    @State private var session: TubeSession?
 
     var body: some Scene {
-        // 主窗口：正常使用 CezzuRoot，传入共享 session
+        // 主窗口：正常使用 TubeRoot，传入共享 session
         WindowGroup {
+            // OAuth 回调 `nembx-tube://…` 到达时，SwiftUI 默认会为外部事件新开一个窗口。
+            // 声明现有主窗口「优先处理」这类事件，URL 就交给当前窗口里的 onOpenURL，不再多开。
             Group {
                 if let session {
-                    CezzuRoot(session: session)
+                    TubeRoot(session: session)
                         .environment(\.playerPresentationController, makePresentationController())
                         .environment(\.playerInteractionController, makeInteractionController())
                         .environment(\.playerCursorController, makeCursorController())
@@ -24,11 +26,13 @@ struct TubeApp: App {
                     ProgressView("正在启动…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .task {
-                            session = await CezzuSession.makePersistent()
+                            session = await TubeSession.makePersistent()
                         }
                 }
             }
+            .handlesExternalEvents(preferring: ["nembx-tube"], allowing: ["nembx-tube"])
         }
+        .handlesExternalEvents(matching: ["nembx-tube"])
         .defaultSize(width: 1200, height: 800)
         .windowResizability(.contentMinSize)
         // 宽屏走沉浸式外壳：内容直接铺到窗口最上沿，标题栏只剩交通灯浮在画面上。
@@ -39,7 +43,10 @@ struct TubeApp: App {
             if let request, let session {
                 PlayerView(
                     request: request,
-                    coordinator: PlaybackCoordinator(history: session.history),
+                    coordinator: PlaybackCoordinator(
+                        history: session.history,
+                        progressTracker: session.collections
+                    ),
                     history: session.history
                 )
                 .environment(session.store)
@@ -49,6 +56,8 @@ struct TubeApp: App {
                 .environment(\.playerCursorController, makeCursorController())
             }
         }
+        // 独立播放器窗口不接外部 URL 事件，免得回调把它当成落点新开一个。
+        .handlesExternalEvents(matching: [])
         .defaultSize(width: 1280, height: 720)
         .windowResizability(.contentMinSize)
     }
