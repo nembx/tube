@@ -131,18 +131,18 @@ public enum CoverColorExtractor: Sendable {
     /// 下载封面后取色。失败返回 `nil`（调用方用 fallback）。
     /// 非 MainActor，可后台跑。
     public static func loadAndExtract(from url: URL) async -> CoverColorPalette? {
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                return nil
+        // 和封面图走同一套镜像回落，否则图片能显示、底色却一直取不到。
+        let mirror = BangumiImageMirrorSettings.mirrorPrefix()
+        for candidate in BangumiImageMirrorSettings.candidateURLs(for: url, mirrorPrefix: mirror) {
+            guard let data = try? await URLSession.shared.data(from: candidate).0, !data.isEmpty else {
+                continue
             }
             // 解码 + 取色放到协作线程，避免卡主线程
             return await Task.detached(priority: .utility) {
                 extract(from: data)
             }.value
-        } catch {
-            return nil
         }
+        return nil
     }
 
     // MARK: - private

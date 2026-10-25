@@ -2,8 +2,8 @@
 //
 // update_index.swift
 //
-// 扫描 cezzu-rule/rules/*.json，为每条未弃用的规则生成一条 catalog 条目，
-// 写入 cezzu-rule/index.json。
+// 扫描 tube-rule/rules/*.json，为每条未弃用的规则生成一条 catalog 条目，
+// 写入 tube-rule/index.json。
 //
 // 字段：
 //   name              ← 规则的 name 字段
@@ -16,7 +16,7 @@
 // 跳过 "deprecated": true 的规则。
 //
 // 用法：
-//   cd cezzu-rule/
+//   cd tube-rule/
 //   ./scripts/update_index.swift
 
 import Foundation

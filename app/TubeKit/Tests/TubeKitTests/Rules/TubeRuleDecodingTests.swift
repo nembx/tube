@@ -115,7 +115,7 @@ struct TubeRuleDecodingTests {
         #expect(rule.antiCrawlerConfig?.captchaButton == "")
     }
 
-    @Test("muliSources is required (cezzu-rule schema)")
+    @Test("muliSources is required (tube-rule schema)")
     func muliSourcesIsRequired() throws {
         // 缺少 muliSources 字段时必须解码失败
         let json = """
@@ -192,7 +192,7 @@ struct TubeRuleDecodingTests {
         #expect(url?.absoluteString.contains("%E5%AD%A4%E7%8B%AC%E6%91%87%E6%BB%9A") == true)
     }
 
-    @Test("seeded cezzu-rule files all decode")
+    @Test("seeded tube-rule files all decode")
     func allSeedRulesDecode() throws {
         let loader = SeededRuleLoader()
         let rules = try loader.loadSeedRules()

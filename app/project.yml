@@ -13,7 +13,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    ENABLE_USER_SCRIPT_SANDBOXING: NO  # 让 sync_seed_rules.sh 能读 ../cezzu-rule/
+    ENABLE_USER_SCRIPT_SANDBOXING: NO  # 让 sync_seed_rules.sh 能读 ../tube-rule/
     DANDANPLAY_APP_ID: ""
     DANDANPLAY_APP_SECRET: ""
     # Bangumi OAuth 应用凭证（可选）。留空时设置页只保留「粘贴 Access Token」登录。
@@ -90,7 +90,7 @@ targets:
       - package: TubeKit
         product: TubeKit
     preBuildScripts:
-      - name: Sync seed rules from cezzu-rule/
+      - name: Sync seed rules from tube-rule/
         script: |
           "${SRCROOT}/scripts/sync_seed_rules.sh"
         basedOnDependencyAnalysis: false
@@ -144,7 +144,7 @@ targets:
       - package: TubeKit
         product: TubeKit
     preBuildScripts:
-      - name: Sync seed rules from cezzu-rule/
+      - name: Sync seed rules from tube-rule/
         script: |
           "${SRCROOT}/scripts/sync_seed_rules.sh"
         basedOnDependencyAnalysis: false

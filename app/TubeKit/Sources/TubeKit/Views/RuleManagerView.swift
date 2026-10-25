@@ -231,7 +231,7 @@ struct RuleSourcesView: View {
                 Task { await tryAdd() }
             }
         } message: {
-            Text("URL 必须是 https，并指向一个 cezzu-rule 格式的 index.json")
+            Text("URL 必须是 https，并指向一个 tube-rule 格式的 index.json")
         }
     }
 

@@ -79,14 +79,14 @@ app/project.yml       XcodeGen 工程定义
 app/Tube-iOS/         iPhone / iPad 入口与资源
 app/Tube-macOS/       Mac 入口与资源
 app/TubeKit/         共享 SwiftUI、播放、规则、存储及测试
-cezzu-rule/           内置规则与订阅索引
+tube-rule/           内置规则与订阅索引
 vendor/Anime4K/       着色器来源及许可证
 scripts/             工程生成、构建、版本及图标脚本
 ```
 
 共享库 `TubeKit` 承载全部跨平台逻辑；上游 Cezzu 的对应模块名为 `CezzuKit`，合并上游改动时按此对应。`app/project.yml` 为工程配置来源，生成的 `.xcodeproj` 不入库。版本统一由 `version.json` 管理。
 
-默认规则订阅指向本仓库 `main/cezzu-rule/`，也保留可选 ghfast 镜像；内置规则随应用打包，首次启动无需下载规则清单。规则内容继承自上游，第三方站点是否可播放需以实际访问为准。
+默认规则订阅指向本仓库 `main/tube-rule/`，也保留可选 ghfast 镜像；内置规则随应用打包，首次启动无需下载规则清单。规则内容继承自上游，第三方站点是否可播放需以实际访问为准。
 
 ## 来源与许可
 

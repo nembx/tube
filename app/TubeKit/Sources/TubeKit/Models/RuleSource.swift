@@ -1,7 +1,7 @@
 import Foundation
 
 /// 一个"规则源"（rule source）—— 提供 `index.json` 清单 + 同名 `*.json` 规则文件
-/// 的远端站点。Cezzu 支持任意数量的规则源（默认内置 cezzu-rule 官方 + ghfast 镜像）。
+/// 的远端站点。Cezzu 支持任意数量的规则源（默认内置 tube-rule 官方 + ghfast 镜像）。
 public struct RuleSource: Codable, Hashable, Sendable, Identifiable {
     public var id: UUID
     public var name: String  // 用户可见名 ("Tube 默认规则"、"我的私有源")
@@ -31,12 +31,12 @@ public struct RuleSource: Codable, Hashable, Sendable, Identifiable {
 
     // MARK: Built-ins
 
-    /// Cezzu 官方规则源，指向 monorepo 里的 `cezzu-rule/`。
+    /// Cezzu 官方规则源，指向 monorepo 里的 `tube-rule/`。
     public static let tubeRuleOfficial = RuleSource(
         id: UUID(uuidString: "C3220500-0001-0000-0000-000000000001")!,
         name: "Tube 默认规则",
-        indexURL: URL(string: "https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json")!,
-        ruleBaseURL: URL(string: "https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/rules/")!,
+        indexURL: URL(string: "https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json")!,
+        ruleBaseURL: URL(string: "https://raw.githubusercontent.com/nembx/tube/main/tube-rule/rules/")!,
         mirrorPrefix: nil,
         isEnabled: true,
         isBuiltIn: true
@@ -46,8 +46,8 @@ public struct RuleSource: Codable, Hashable, Sendable, Identifiable {
     public static let tubeRuleGhfast = RuleSource(
         id: UUID(uuidString: "C3220500-0001-0000-0000-000000000002")!,
         name: "Tube 规则镜像 (ghfast)",
-        indexURL: URL(string: "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json")!,
-        ruleBaseURL: URL(string: "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/rules/")!,
+        indexURL: URL(string: "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json")!,
+        ruleBaseURL: URL(string: "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/tube-rule/rules/")!,
         mirrorPrefix: "https://ghfast.top/",
         isEnabled: false,
         isBuiltIn: true

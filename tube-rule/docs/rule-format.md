@@ -1,8 +1,8 @@
 # 规则格式
 
-> 本文档是 cezzu-rule 协议的**唯一权威定义**。所有 `rules/*.json` 文件都必须遵循这里描述的字段、类型与语义。
+> 本文档是 tube-rule 协议的**唯一权威定义**。所有 `rules/*.json` 文件都必须遵循这里描述的字段、类型与语义。
 
-cezzu-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串型 `api`/`version`，配 XPath 1.0 子集做 HTML 抽取。
+tube-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串型 `api`/`version`，配 XPath 1.0 子集做 HTML 抽取。
 
 ## 完整字段表
 
@@ -45,7 +45,7 @@ cezzu-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串�
 | `captchaInput` | string | XPath：验证码输入框 |
 | `captchaButton` | string | XPath：提交按钮 |
 
-> Cezzu 客户端自 0.1.0-alpha.6 起消费这组字段：搜索页 HTML 命中 `captchaImage` 或 `captchaButton` 的 XPath 时，App 会抛出 `captchaRequired` 并弹出内置 `WKWebView` sheet 让用户在真浏览器里完成校验，通过后把 cookie 合并进内存级 `PluginCookieStore`，后续同规则请求自动带上。`enabled: false` 或字段缺失则走原有无反爬逻辑。
+> Tube 客户端自 0.1.0-alpha.6 起消费这组字段：搜索页 HTML 命中 `captchaImage` 或 `captchaButton` 的 XPath 时，App 会抛出 `captchaRequired` 并弹出内置 `WKWebView` sheet 让用户在真浏览器里完成校验，通过后把 cookie 合并进内存级 `PluginCookieStore`，后续同规则请求自动带上。`enabled: false` 或字段缺失则走原有无反爬逻辑。
 
 ### `searchApiConfig` / `chapterApiConfig`（API 模式）
 
@@ -190,7 +190,7 @@ cookie 绑定到播放页 URL 所在的域，path 固定 `/`。空片段、缺 `
 
 ## XPath 子集
 
-cezzu-rule **只支持 XPath**（不支持 CSS 选择器、不支持正则、不支持自定义 JS hook）。具体子集：
+tube-rule **只支持 XPath**（不支持 CSS 选择器、不支持正则、不支持自定义 JS hook）。具体子集：
 
 - `//`-prefixed 表达式（绝对路径）
 - `@class='...'` / `@id='...'` 类的属性谓词
@@ -211,7 +211,7 @@ XPath 引擎在客户端实现为 `Kanna` (libxml2) 包装。
 
 ## `muliSources` 拼写说明
 
-是的，少了一个 `t`。这是 cezzu-rule 格式从早期就保留下来的历史拼写，已经写进了所有现存规则文件与客户端代码，**必须保留这个拼写**，请不要"修复"它。
+是的，少了一个 `t`。这是 tube-rule 格式从早期就保留下来的历史拼写，已经写进了所有现存规则文件与客户端代码，**必须保留这个拼写**，请不要"修复"它。
 
 ## 索引 (`index.json`) 格式
 

@@ -16,7 +16,7 @@ CezzuKit 引入的第三方组件清单与各自的 license 信息。
 
 ## 规则格式
 
-cezzu-rule 是 Cezzu 自己的 JSON 规则格式。完整字段定义见 `cezzu-rule/docs/rule-format.md`。
+tube-rule 是 Cezzu 自己的 JSON 规则格式。完整字段定义见 `tube-rule/docs/rule-format.md`。
 
 ## 系统框架
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// 反爬虫 / 验证码自动求解配置（cezzu-rule 格式 API ≥ 6 才支持）。
+/// 反爬虫 / 验证码自动求解配置（tube-rule 格式 API ≥ 6 才支持）。
 /// v1 仅做解码，运行时不消费 —— 把 captcha 流程留给后续 change。
 public struct AntiCrawlerConfig: Codable, Hashable, Sendable {
     /// `1` = 图片验证码（用户输入）；`2` = 自动点击按钮（"我不是机器人"等）。

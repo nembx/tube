@@ -5,7 +5,7 @@ Tube 是 Cezzu 的派生项目，并非从零重写。
 | 项目 | 用途 | 许可 / 来源 |
 | --- | --- | --- |
 | [Cezzu](https://github.com/bentx2685/cezzu) | 原生应用、共享库、测试和规则基础 | MIT；根目录 `LICENSE` 保留原始全文 |
-| [KazumiRules](https://github.com/Predidit/KazumiRules) | 初始规则内容 | MIT；`cezzu-rule/LICENSE` |
+| [KazumiRules](https://github.com/Predidit/KazumiRules) | 初始规则内容 | MIT；`tube-rule/LICENSE` |
 | [Kanna](https://github.com/tid-kijyun/Kanna) | HTML / XPath 解析 | MIT；锁定 5.3.0，许可证随 SwiftPM 下载 |
 | [Anime4K](https://github.com/bloc97/Anime4K) | 超分辨率着色器 | MIT；`vendor/Anime4K/LICENSE` |
 

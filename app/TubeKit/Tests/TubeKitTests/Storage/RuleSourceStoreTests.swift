@@ -15,10 +15,10 @@ struct RuleSourceStoreTests {
 
         #expect(inserted.count == 2)
         #expect(inserted[0].id == RuleSource.tubeRuleOfficial.id)
-        #expect(inserted[0].indexURL.absoluteString == "https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json")
-        #expect(inserted[0].ruleBaseURL.absoluteString == "https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/rules/")
+        #expect(inserted[0].indexURL.absoluteString == "https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json")
+        #expect(inserted[0].ruleBaseURL.absoluteString == "https://raw.githubusercontent.com/nembx/tube/main/tube-rule/rules/")
         #expect(inserted[1].id == RuleSource.tubeRuleGhfast.id)
-        #expect(inserted[1].indexURL.absoluteString == "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json")
+        #expect(inserted[1].indexURL.absoluteString == "https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json")
         #expect(inserted[1].isEnabled == false)
     }
 
@@ -27,8 +27,8 @@ struct RuleSourceStoreTests {
         let record = RuleSourceRecord(
             id: RuleSource.tubeRuleOfficial.id,
             name: "Tube 默认规则",
-            indexURLString: "https://raw.githubusercontent.com/bent2685/cezzu-rule/main/index.json",
-            ruleBaseURLString: "https://raw.githubusercontent.com/bent2685/cezzu-rule/main/rules/",
+            indexURLString: "https://raw.githubusercontent.com/bent2685/tube-rule/main/index.json",
+            ruleBaseURLString: "https://raw.githubusercontent.com/bent2685/tube-rule/main/rules/",
             mirrorPrefix: nil,
             isEnabled: false,
             isBuiltIn: true

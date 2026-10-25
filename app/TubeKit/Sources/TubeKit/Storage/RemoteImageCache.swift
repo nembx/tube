@@ -117,12 +117,21 @@ public actor RemoteImageCache {
     }
 
     public static let download: Fetch = { url in
+        let mirror = BangumiImageMirrorSettings.mirrorPrefix()
+        // 镜像优先、原地址兜底：lain.bgm.tv 在国内常被挡住，直连等满超时再回落实在太慢。
+        for candidate in BangumiImageMirrorSettings.candidateURLs(for: url, mirrorPrefix: mirror) {
+            if let data = await fetchOnce(candidate) { return data }
+        }
+        return nil
+    }
+
+    private static func fetchOnce(_ url: URL) async -> Data? {
         do {
             let (data, response) = try await session.data(from: url)
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 return nil
             }
-            return data
+            return data.isEmpty ? nil : data
         } catch {
             return nil
         }

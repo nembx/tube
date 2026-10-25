@@ -9,7 +9,7 @@
 - `Tube-iOS` Release 真机目标构建成功，输出 `artifacts/Tube-ios-unsigned.ipa`。已检查 IPA 中 `Payload/Tube.app`、Info.plist 和开源许可资源。
 - `Tube-iOS` Debug 模拟器目标构建成功，并在 iPhone 18 Pro / iOS 27 模拟器安装启动。截图确认首页、Bangumi 实时推荐、封面、评分与底部导航成功显示。
 - 两端名称均为 Tube，版本 0.1.0 (1)，包标识为 `com.nembx.tube.iOS` / `com.nembx.tube.macOS`，最低系统为 iOS 17 / macOS 14。
-- 已验证 85 个规则 JSON 可解析，订阅索引含 17 项，默认地址指向 `nembx/tube/main/cezzu-rule/`。
+- 已验证 85 个规则 JSON 可解析，订阅索引含 17 项，默认地址指向 `nembx/tube/main/tube-rule/`。
 - Shell 脚本语法、Info.plist 格式通过检查。
 
 ## 本次调整

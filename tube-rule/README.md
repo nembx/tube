@@ -1,4 +1,4 @@
-# Tube 规则库（cezzu-rule）
+# Tube 规则库（tube-rule）
 
 > **Tube App 的规则内容仓库** —— JSON 格式的资源站规则集合 + 自动生成的索引 + 贡献文档。
 > 不含任何可执行代码，只有一组 JSON 规则文件与一个索引生成脚本。
@@ -15,10 +15,10 @@ Tube App 默认从本仓库拉取规则；用户也可以在 App 内添加任意
 
 要说清楚的几件事：
 
-- **规则格式完全兼容。** Cezzu 直接采用了 Kazumi 的规则协议（`api` / `muliSources` / `searchList` / `chapterRoads` 等字段，含历史拼写 `muliSources` 少一个 `t` 的原样保留）。**Kazumi 的规则可以直接拿到 Cezzu 用，反之亦然。**
+- **规则格式完全兼容。** Tube 直接采用了 Kazumi 的规则协议（`api` / `muliSources` / `searchList` / `chapterRoads` 等字段，含历史拼写 `muliSources` 少一个 `t` 的原样保留）。**Kazumi 的规则可以直接拿到 Tube 用，反之亦然。**
 - **绝大多数规则的原始作者是 Kazumi 社区。** `rules/` 下的规则文件及其 XPath 表达式来自上游及其贡献者，规则快照继承自 Cezzu；可按下文流程从 KazumiRules 同步新增规则与修正。
-- **API 等级沿用上游编号。** 上游 README 的能力表只列到 API 5，但上游规则里实际已经出现 6 / 7 / 8 级；本仓库沿用同一套编号，并在 [`docs/rule-format.md`](./docs/rule-format.md) 里补齐了 6（`antiCrawlerConfig` 验证码流程）与 8（`searchMode` / `chapterMode` 的 JSON API + JSONPath 模式）的字段语义 —— 这是 cezzu-rule 字段定义的唯一权威文档。
-- **同步是单向的。** 本仓库从上游拉取，不往上游推；Cezzu 客户端的行为差异（如反爬走内置 WKWebView sheet）只写在本仓库文档里，不改动规则文件本身。
+- **API 等级沿用上游编号。** 上游 README 的能力表只列到 API 5，但上游规则里实际已经出现 6 / 7 / 8 级；本仓库沿用同一套编号，并在 [`docs/rule-format.md`](./docs/rule-format.md) 里补齐了 6（`antiCrawlerConfig` 验证码流程）与 8（`searchMode` / `chapterMode` 的 JSON API + JSONPath 模式）的字段语义 —— 这是 tube-rule 字段定义的唯一权威文档。
+- **同步是单向的。** 本仓库从上游拉取，不往上游推；Tube 客户端的行为差异（如反爬走内置 WKWebView sheet）只写在本仓库文档里，不改动规则文件本身。
 - **许可证一致，署名保留。** 上游 MIT，本仓库同样 MIT，并在 [`LICENSE`](./LICENSE) 中保留 `Copyright (c) 2024 Predidit` 的原始版权声明。
 
 感谢 Kazumi 项目与它的每一位规则贡献者 ^•ﻌ•^
@@ -32,25 +32,25 @@ Tube App 默认从本仓库拉取规则；用户也可以在 App 内添加任意
 **官方直连**
 
 ```
-索引  https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json
-规则  https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/rules/
+索引  https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json
+规则  https://raw.githubusercontent.com/nembx/tube/main/tube-rule/rules/
 ```
 
 **ghfast 镜像**（国内直连 raw.githubusercontent.com 不稳时用，整条 URL 前面加 `https://ghfast.top/` 前缀即可）
 
 ```
-索引  https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/index.json
-规则  https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/cezzu-rule/rules/
+索引  https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/tube-rule/index.json
+规则  https://ghfast.top/https://raw.githubusercontent.com/nembx/tube/main/tube-rule/rules/
 ```
 
-App 先拉 `index.json` 拿到 catalog（`name` / `version` / `lastUpdate` 等），再按需拼 `ruleBaseURL + <name>.json` 取具体规则，所以两个地址必须指向同一个 commit 下的同一份内容。换成任意 fork 或自建镜像也是同样两条：把 `nembx/tube/main/cezzu-rule` 替换掉即可。
+App 先拉 `index.json` 拿到 catalog（`name` / `version` / `lastUpdate` 等），再按需拼 `ruleBaseURL + <name>.json` 取具体规则，所以两个地址必须指向同一个 commit 下的同一份内容。换成任意 fork 或自建镜像也是同样两条：把 `nembx/tube/main/tube-rule` 替换掉即可。
 
 > raw.githubusercontent.com 有 CDN 缓存（通常几分钟），push 之后 App 里不一定立刻能看到新版本，等一会儿再刷新。
 
 ## 目录结构
 
 ```
-cezzu-rule/
+tube-rule/
 ├── README.md                ← 你正在看
 ├── LICENSE                  ← MIT（含上游署名）
 ├── CONTRIBUTING.md          ← 如何贡献新规则 / 弃用旧规则
@@ -140,7 +140,7 @@ cezzu-rule/
 ```bash
 git clone --depth 1 https://github.com/Predidit/KazumiRules /tmp/KazumiRules
 # 逐个比对 rules/<name>.json 与 /tmp/KazumiRules/<name>.json，
-# 合入上游的新增规则与修正（注意保留 Cezzu 扩展字段），然后：
+# 合入上游的新增规则与修正（注意保留 Tube 扩展字段），然后：
 ./scripts/update_index.swift
 ```
 

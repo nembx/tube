@@ -1,11 +1,11 @@
 import Foundation
 
-/// Cezzu 的 JSON 规则模型 —— cezzu-rule 格式的 Swift 对应物。
+/// Cezzu 的 JSON 规则模型 —— tube-rule 格式的 Swift 对应物。
 ///
-/// 对应的 schema 文档见 `cezzu-rule/docs/rule-format.md`。
+/// 对应的 schema 文档见 `tube-rule/docs/rule-format.md`。
 /// 注意：
 ///   - `api` 与 `version` 都是 `String`（不是 Int）
-///   - 历史拼写 `muliSources`（少一个 `t`）**保留原样**，是 cezzu-rule 格式的一部分
+///   - 历史拼写 `muliSources`（少一个 `t`）**保留原样**，是 tube-rule 格式的一部分
 ///   - 可选字段（`usePost` / `searchMode` / `searchApiConfig` 等）都有默认值
 public struct TubeRule: Codable, Hashable, Sendable, Identifiable {
 
@@ -113,7 +113,7 @@ public struct TubeRule: Codable, Hashable, Sendable, Identifiable {
         case type
         case name
         case version
-        case muliSources    // ← 历史拼写，cezzu-rule 格式一部分
+        case muliSources    // ← 历史拼写，tube-rule 格式一部分
         case useWebview
         case useNativePlayer
         case userAgent
@@ -181,7 +181,7 @@ public struct TubeRule: Codable, Hashable, Sendable, Identifiable {
     // MARK: Convenience
 
     /// 把 `searchURL` 中的字面量 `@keyword` 替换为 URL-encoded 关键字。
-    /// 这是 cezzu-rule 格式唯一支持的占位符。
+    /// 这是 tube-rule 格式唯一支持的占位符。
     public func resolvedSearchURL(for keyword: String) -> URL? {
         let encoded =
             keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
