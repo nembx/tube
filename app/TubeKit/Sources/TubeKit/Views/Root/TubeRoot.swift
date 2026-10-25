@@ -56,6 +56,14 @@ public struct TubeRoot: View {
                 didInitializePersistentSession = true
                 await initializeOwned()
             }
+            // 切换 Bangumi 服务站点：各视图模型在 init 时捕获了 API 客户端，
+            // 只换 shared 实例不够 —— 重建整个 session 才能让搜索 / 详情 / 登录都指向新站点。
+            .onReceive(NotificationCenter.default.publisher(for: .bangumiSiteChanged)) { _ in
+                guard externalSession == nil else { return }
+                Task { @MainActor in
+                    ownedSession = await TubeSession.makePersistent()
+                }
+            }
         #if os(macOS)
         .frame(minWidth: 900, minHeight: 600)
         #endif
@@ -80,6 +88,8 @@ public final class TubeSession {
     public let collections: BangumiCollectionStore
     public let container: ModelContainer?
     public let bangumiAPI: BangumiAPIClientProtocol
+    /// 本会话使用的 Bangumi 站点（设置里切换镜像时重建 session）。
+    public let bangumiSite: BangumiSite
     public let shouldBootstrapAtLaunch: Bool
 
     public init(
@@ -88,7 +98,8 @@ public final class TubeSession {
         followStore: FollowStore,
         searchHistory: SearchHistoryStore,
         container: ModelContainer?,
-        bangumiAPI: BangumiAPIClientProtocol = BangumiAPIClient.shared,
+        bangumiAPI: BangumiAPIClientProtocol? = nil,
+        bangumiSite: BangumiSite = BangumiSiteSettings.selectedSite(),
         auth: BangumiAuthStore? = nil,
         collections: BangumiCollectionStore? = nil,
         shouldBootstrapAtLaunch: Bool = true
@@ -98,13 +109,22 @@ public final class TubeSession {
         self.followStore = followStore
         self.searchHistory = searchHistory
         self.container = container
-        self.bangumiAPI = bangumiAPI
-        let resolvedAuth = auth ?? BangumiAuthStore()
+        let resolvedAPI = bangumiAPI ?? BangumiAPIClient(site: bangumiSite)
+        let accountAPI: BangumiAccountAPIProtocol
+        if let existing = resolvedAPI as? BangumiAccountAPIProtocol {
+            accountAPI = existing
+        } else {
+            accountAPI = BangumiAPIClient(site: bangumiSite)
+        }
+        self.bangumiAPI = resolvedAPI
+        self.bangumiSite = bangumiSite
+        let resolvedAuth = auth ?? BangumiAuthStore(api: accountAPI, oauthConfig: .forSite(bangumiSite))
         self.auth = resolvedAuth
         self.collections = collections ?? BangumiCollectionStore(
             auth: resolvedAuth,
             followStore: followStore,
-            subjectAPI: bangumiAPI
+            api: accountAPI,
+            subjectAPI: resolvedAPI
         )
         self.shouldBootstrapAtLaunch = shouldBootstrapAtLaunch
     }

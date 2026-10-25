@@ -43,6 +43,18 @@ public struct BangumiOAuthConfig: Sendable {
 
     /// 从 Info.plist 读取配置。缺省时 `isConfigured == false`，UI 会隐藏 OAuth 入口，
     /// 只留「手动填 Access Token」那条路。
+    /// 按站点推导授权页与换 token 地址（官方：bgm.tv；镜像：api.<host>）。
+    public static func forSite(_ site: BangumiSite, bundle: Bundle = .main) -> BangumiOAuthConfig {
+        var config = fromBundle(bundle)
+        return BangumiOAuthConfig(
+            clientID: config.clientID,
+            clientSecret: config.clientSecret,
+            redirectURI: config.redirectURI,
+            authorizeURL: site.authorizeURL,
+            tokenURL: site.tokenURL
+        )
+    }
+
     public static func fromBundle(_ bundle: Bundle = .main) -> BangumiOAuthConfig {
         func string(_ key: String) -> String {
             (bundle.object(forInfoDictionaryKey: key) as? String)?

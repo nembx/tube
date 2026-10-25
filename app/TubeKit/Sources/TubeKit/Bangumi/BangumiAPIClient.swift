@@ -102,20 +102,25 @@ extension BangumiAPIClientProtocol {
 ///   - Bangumi 要求一个固定 UA（`nembx/Tube/Version (平台) (主页)`），而不是规则随机 UA
 ///   - Bangumi POST 走 JSON body 而不是 form-urlencoded
 public actor BangumiAPIClient: BangumiAPIClientProtocol {
-    public static let shared = BangumiAPIClient()
+    /// 跟随「设置 → Bangumi 服务」当前选中的站点。
+    public static let shared = BangumiAPIClient(site: BangumiSiteSettings.selectedSite())
 
     let session: URLSession
     let userAgent: String
-    private let nextDomain: URL
+    /// 只有官方站点有 next.bgm.tv 的热门接口；镜像站为 nil，热门回落到 API 搜索。
+    private let nextDomain: URL?
     let apiDomain: URL
     private let webDomain: URL
+    /// 实际使用的站点（图床改写也按它推导）。
+    let site: BangumiSite
 
     public init(
         session: URLSession? = nil,
         userAgent: String = BangumiAPIClient.defaultUserAgent,
-        apiDomain: URL = URL(string: "https://api.bgm.tv")!,
-        nextDomain: URL = URL(string: "https://next.bgm.tv")!,
-        webDomain: URL = URL(string: "https://bgm.tv")!
+        site: BangumiSite = .official,
+        apiDomain: URL? = nil,
+        nextDomain: URL? = nil,
+        webDomain: URL? = nil
     ) {
         if let session {
             self.session = session
@@ -126,9 +131,10 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
             self.session = URLSession(configuration: cfg)
         }
         self.userAgent = userAgent
-        self.apiDomain = apiDomain
-        self.nextDomain = nextDomain
-        self.webDomain = webDomain
+        self.site = site
+        self.apiDomain = apiDomain ?? site.apiDomain
+        self.nextDomain = nextDomain ?? site.nextDomain
+        self.webDomain = webDomain ?? site.webDomain
     }
 
     /// bgm 要求的 UA 形态：`{开发者}/{应用}/{版本} ({平台}) ({主页})`，用库默认 UA 可能被封。
@@ -146,6 +152,16 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
     // MARK: - Trending (next.bgm.tv)
 
     public func trending(limit: Int = 24, offset: Int = 0) async throws -> [BangumiItem] {
+        // 镜像站没有 next.bgm.tv：用 API 按收藏人数排序近似「热门」。
+        guard let nextDomain else {
+            return try await searchSubjects(
+                keyword: "",
+                sort: .heat,
+                limit: limit,
+                offset: offset,
+                filter: BangumiSearchFilter()
+            )
+        }
         var components = URLComponents(
             url: nextDomain.appendingPathComponent("/p1/trending/subjects"),
             resolvingAgainstBaseURL: false

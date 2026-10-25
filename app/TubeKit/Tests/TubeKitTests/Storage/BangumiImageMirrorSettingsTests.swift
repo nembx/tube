@@ -89,12 +89,31 @@ struct BangumiImageMirrorSettingsTests {
         #expect(BangumiImageMirrorSettings.sanitize("http://127.0.0.1:8080") == "http://127.0.0.1:8080")
     }
 
-    @Test("settings default to wsrv.nl and can be disabled")
+    @Test("auto follows the selected site: official stays direct, mirror uses lain.<host>")
+    func autoFollowsSite() throws {
+        #expect(
+            BangumiImageMirrorSettings.mirroredURL(
+                for: cover, mirrorPrefix: "auto", site: .official
+            ) == nil
+        )
+        let mirrored = try #require(
+            BangumiImageMirrorSettings.mirroredURL(for: cover, mirrorPrefix: "auto", site: .mirrorLat)
+        )
+        #expect(mirrored.absoluteString == "https://lain.bangumi.lat/pic/cover/l/ab/cd/123.jpg")
+        // API 图片接口同样改写到镜像图床
+        let apiImage = URL(string: "https://api.bgm.tv/v0/subjects/2/image")!
+        #expect(
+            BangumiImageMirrorSettings.mirroredURL(for: apiImage, mirrorPrefix: "auto", site: .mirrorLat)?
+                .absoluteString == "https://lain.bangumi.lat/v0/subjects/2/image"
+        )
+    }
+
+    @Test("settings default to auto and can be disabled")
     func fromDefaults() {
         let suite = "BangumiImageMirrorSettingsTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
-        #expect(BangumiImageMirrorSettings.mirrorPrefix(from: defaults) == "https://wsrv.nl")
+        #expect(BangumiImageMirrorSettings.mirrorPrefix(from: defaults) == "auto")
         defaults.set("off", forKey: BangumiImageMirrorSettings.mirrorKey)
         #expect(BangumiImageMirrorSettings.mirrorPrefix(from: defaults) == "")
         defaults.set("  https://img.example.com/ ", forKey: BangumiImageMirrorSettings.mirrorKey)

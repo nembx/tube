@@ -66,7 +66,7 @@ public final class BangumiAuthStore {
 
     public init(
         api: BangumiAccountAPIProtocol = BangumiAPIClient.shared,
-        oauthConfig: BangumiOAuthConfig = .fromBundle(),
+        oauthConfig: BangumiOAuthConfig = .forSite(BangumiSiteSettings.selectedSite()),
         defaults: UserDefaults = .standard,
         storage: BangumiTokenStorage = KeychainTokenStorage(),
         session: URLSession? = nil

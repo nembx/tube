@@ -45,7 +45,7 @@ public struct SettingsView: View {
 
             DanDanPlayCredentialsSettings()
 
-            BangumiImageMirrorSettingsView()
+            BangumiSiteSettingsView()
 
             Section("数据源") {
                 NavigationLink {
