@@ -100,6 +100,7 @@ extension CaptchaWebView {
     fileprivate func makeWebView() -> WKWebView {
         let cfg = WKWebViewConfiguration()
         cfg.websiteDataStore = .default()
+        WebKitPlaybackProxy.apply(to: cfg.websiteDataStore)
         #if canImport(UIKit)
             cfg.allowsInlineMediaPlayback = true
         #endif

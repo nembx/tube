@@ -73,6 +73,8 @@ final class ExtractionSession: NSObject, WKScriptMessageHandler, WKNavigationDel
         continuation: AsyncStream<ExtractedMedia>.Continuation
     ) async -> ExtractionSession {
         let config = WKWebViewConfiguration()
+        // 资源站在境外时，嗅探页本身也得走用户的播放代理。
+        WebKitPlaybackProxy.apply(to: config.websiteDataStore)
         #if canImport(UIKit)
             config.allowsInlineMediaPlayback = true
         #endif

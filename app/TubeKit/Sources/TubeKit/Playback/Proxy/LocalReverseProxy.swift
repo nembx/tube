@@ -38,6 +38,8 @@ public actor LocalReverseProxy {
             // 慢源上分片下几十秒是常态，30 秒会把它们直接判死。
             cfg.timeoutIntervalForRequest = 60
             cfg.timeoutIntervalForResource = 600
+            // 视频 CDN 在境外时，用户可在设置里给播放链路单独配一个代理。
+            PlaybackProxySettings.apply(to: cfg)
             return cfg
         }()
         self.relay = StreamingHTTPRelay(configuration: cfg)

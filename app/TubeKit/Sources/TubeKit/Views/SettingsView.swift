@@ -29,6 +29,8 @@ public struct SettingsView: View {
                 )
             }
 
+            PlaybackProxySettingsView()
+
             Section("弹幕") {
                 NavigationLink {
                     Form {
