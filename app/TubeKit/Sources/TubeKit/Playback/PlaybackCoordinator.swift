@@ -119,7 +119,12 @@ public final class PlaybackCoordinator {
             }
         }
         guard let media = captured else {
-            phase = .failed(message: "未能从该集提取出可播放 URL")
+            // 提取在 15 秒内没有结果：要么资源站页面打不开（国内常见），
+            // 要么页面打开了但没找到可识别的视频地址。给用户可操作的提示。
+            phase = .failed(
+                message: "未能从该集提取出可播放 URL。可以换一个播放源；若资源站在国内打开缓慢，"
+                    + "可在设置里启用「播放代理」。"
+            )
             return
         }
 

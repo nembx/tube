@@ -51,6 +51,30 @@
 
     scanNode(document.documentElement);
 
+    // iframe 里的视频：站内播放页常把播放器放进 iframe，父文档看不到它的 <video>。
+    // 同源时直接读，跨源时读不到（沙箱限制），靠 atDocumentStart 的 XHR/fetch hook 兜底。
+    function scanFrames() {
+        var frames = document.querySelectorAll('iframe');
+        for (var i = 0; i < frames.length; i++) {
+            var f = frames[i];
+            // 不要把 iframe 的 src 当成视频：那是子页面地址，规则没写 videoURLPattern 时
+            // 会被误当成播放源交给播放器。只扫它内部的 video/source。
+            try {
+                var doc = f.contentDocument;
+                if (doc) scanNode(doc.documentElement);
+            } catch (e) {}
+        }
+    }
+
+    // 主动扫描：被动等 XHR/fetch 会漏掉「页面加载完就不再发请求」的站点
+    // （视频地址写死在 DOM 或 iframe 里）。参考 Kazumi 的 Timer.periodic 每秒扫一遍。
+    window.__tubeScanTimer = setInterval(function () {
+        try {
+            scanNode(document.documentElement);
+            scanFrames();
+        } catch (e) {}
+    }, 1000);
+
     try {
         var observer = new MutationObserver(function (mutations) {
             for (var i = 0; i < mutations.length; i++) {
@@ -74,4 +98,6 @@
             attributeFilter: ['src']
         });
     } catch (e) {}
+
+    scanFrames();
 })();

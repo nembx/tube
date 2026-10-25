@@ -56,6 +56,7 @@ final class ExtractionSession: NSObject, WKScriptMessageHandler, WKNavigationDel
     /// 规则声明的视频 URL 过滤 / 改写；规则没写 `videoURLPattern` 时是恒等变换。
     private let videoFilter: RuleVideoFilter
     private var torn = false
+    private var timeoutTask: Task<Void, Never>?
 
     private init(
         webView: WKWebView,
@@ -130,12 +131,39 @@ final class ExtractionSession: NSObject, WKScriptMessageHandler, WKNavigationDel
             webView.customUserAgent = rule.userAgent
         }
         webView.load(req)
+        session.scheduleTimeout()
         return session
+    }
+
+    // MARK: WKNavigationDelegate
+
+    /// 页面加载失败时立刻结束这一轮，否则调用方的 `for await` 会一直挂着，
+    /// UI 永远停在「正在提取播放源」。
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+        failExtraction(error)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: any Error
+    ) {
+        failExtraction(error)
+    }
+
+    private func failExtraction(_ error: any Error) {
+        guard !torn else { return }
+        // 用户主动取消（切换剧集 / 关闭播放器）不算失败。
+        if (error as NSError).code == NSURLErrorCancelled { return }
+        continuation.finish()
+        Task { await tearDown() }
     }
 
     func tearDown() async {
         guard !torn else { return }
         torn = true
+        timeoutTask?.cancel()
+        timeoutTask = nil
         webView.stopLoading()
         webView.configuration.userContentController.removeAllUserScripts()
         webView.configuration.userContentController.removeAllContentRuleLists()
@@ -143,6 +171,20 @@ final class ExtractionSession: NSObject, WKScriptMessageHandler, WKNavigationDel
         webView.navigationDelegate = nil
         WebViewHostingWindow.shared.detach(webView)
         continuation.finish()
+    }
+
+    /// 与 Kazumi 的 `WebviewVideoSourceService(timeout: 15s)` 一致：
+    /// 页面能打开但一直没嗅到视频时，到点结束这一轮，让 UI 明确提示失败，
+    /// 而不是永远停在「正在提取播放源」。
+    static let extractionTimeout: Duration = .seconds(15)
+
+    private func scheduleTimeout() {
+        timeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.extractionTimeout)
+            guard !Task.isCancelled, let self, !self.torn else { return }
+            self.continuation.finish()
+            await self.tearDown()
+        }
     }
 
     // MARK: WKScriptMessageHandler

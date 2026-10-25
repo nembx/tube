@@ -123,15 +123,44 @@ jobs:
     needs: [test, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
+
+      # 取 CHANGELOG.md 里与 tag 同版本的一节作为更新说明；找不到就退化为自动生成。
+      - name: 生成更新说明
+        id: notes
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          BODY=$(python3 - "$TAG" <<'PY'
+          import re, sys
+          tag = sys.argv[1]
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          # 匹配 `## [x.y.z]`，取到下一个 `## ` 之前
+          pattern = re.compile(r"^## \[" + re.escape(tag) + r"\][^\n]*\n(.*?)(?=^## |\Z)", re.M | re.S)
+          m = pattern.search(text)
+          print(m.group(1).strip() if m else "")
+          PY
+          )
+          {
+            echo "## 更新内容"
+            echo
+            if [ -n "$BODY" ]; then echo "$BODY"; else echo "（本版本未填写更新日志，见下方提交记录。）"; fi
+            echo
+            echo "## 安装说明"
+            echo
+            echo '- `*-ios-unsigned.ipa`：未签名，安装前需自行签名（如 Sideloadly / AltStore / 自己的开发者证书）。'
+            echo '- `*-macos.dmg`：本地 ad-hoc 签名、未公证。首次打开若被拦截，在「系统设置 → 隐私与安全性」里允许，或执行 `xattr -dr com.apple.quarantine /Applications/Tube.app`。'
+          } > release-notes.md
+          echo "----- release-notes.md -----"
+          cat release-notes.md
+
       - name: 创建 Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          body_path: release-notes.md
           generate_release_notes: true
-          body: |
-            - `*-ios-unsigned.ipa`：未签名，安装前需自行签名（如 Sideloadly / AltStore / 自己的开发者证书）。
-            - `*-macos.dmg`：本地 ad-hoc 签名、未公证。首次打开若被拦截，在「系统设置 → 隐私与安全性」里允许，或执行 `xattr -dr com.apple.quarantine /Applications/Tube.app`。

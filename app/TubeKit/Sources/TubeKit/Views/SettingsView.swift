@@ -11,6 +11,8 @@ public struct SettingsView: View {
 
     @AppStorage(PlaybackSettings.enableLocalProxyKey) private var enableLocalProxy: Bool =
         PlaybackSettings.enableLocalProxyDefault
+    @AppStorage(AppearanceSettings.modeKey) private var appearance: String =
+        AppearanceSettings.Mode.system.rawValue
 
     public init() {}
 
@@ -27,6 +29,19 @@ public struct SettingsView: View {
                 Text(
                     "部分资源站要求自定义 Referer / User-Agent；本地反代会在播放器和站点之间转发请求并注入这些头部。\n关闭后，遇到这类规则将退化为最大努力模式（可能播放失败）。"
                 )
+            }
+
+            Section {
+                Picker("主题", selection: $appearance) {
+                    ForEach(AppearanceSettings.Mode.allCases) { mode in
+                        Label(mode.label, systemImage: mode.systemImage).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("外观")
+            } footer: {
+                Text("「跟随系统」时随系统深浅色自动切换；浅色 / 深色为全局固定。")
             }
 
             PlaybackProxySettingsView()

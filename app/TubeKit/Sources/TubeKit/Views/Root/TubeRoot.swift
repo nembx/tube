@@ -14,6 +14,9 @@ public struct TubeRoot: View {
     private let externalSession: TubeSession?
     @State private var ownedSession: TubeSession = .empty()
     @State private var didInitializePersistentSession: Bool = false
+    /// 外观：跟随系统 / 浅色 / 深色。整份 UI 的取色都来自 colorScheme，这一处即可全局生效。
+    @AppStorage(AppearanceSettings.modeKey) private var appearanceRaw: String =
+        AppearanceSettings.Mode.system.rawValue
 
     /// 默认构造：内部自己创建空 session 并在 task 里初始化持久化容器（iOS / 正常单窗口路径）。
     public init() {
@@ -38,6 +41,9 @@ public struct TubeRoot: View {
             .environment(session.searchHistory)
             .environment(session.auth)
             .environment(session.collections)
+            .preferredColorScheme(
+                (AppearanceSettings.Mode(rawValue: appearanceRaw) ?? .system).colorScheme
+            )
             // OAuth 回调兜底：授权窗口没拦到 `nembx-tube://` 跳转、由系统直接打开 App 时走这里。
             .onOpenURL { url in
                 BangumiAuthStore.log.info("onOpenURL \(url.scheme ?? "?", privacy: .public)://\(url.host ?? "?", privacy: .public)")

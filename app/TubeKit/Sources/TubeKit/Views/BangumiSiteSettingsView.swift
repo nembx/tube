@@ -32,15 +32,23 @@ struct BangumiSiteSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
+
+                        // 内置站点（官方 / bangumi.lat）不可删；自定义镜像给一个明确的删除按钮
+                        // —— Form 里 swipeActions 在 macOS 上不生效，必须有可见入口。
+                        if !BangumiSite.presets.contains(site) {
+                            Button {
+                                remove(site)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("删除 \(site.name)")
+                        }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .swipeActions(edge: .trailing) {
-                    if !BangumiSite.presets.contains(site) {
-                        Button("删除", role: .destructive) { remove(site) }
-                    }
-                }
             }
 
             HStack {
