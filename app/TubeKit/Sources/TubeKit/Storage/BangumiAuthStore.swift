@@ -122,6 +122,7 @@ public final class BangumiAuthStore {
             Self.log.info("token received, fetching /v0/me")
             let me = try await api.me(token: token.accessToken)
             apply(token: token, user: me)
+            clearPendingState()
             lastError = nil
             Self.log.info("login complete for user id \(me.id)")
             return true
@@ -141,12 +142,25 @@ public final class BangumiAuthStore {
     /// 同时也是「有没有一轮授权在进行」的标志，`onOpenURL` 据此决定要不要接这个 URL。
     public private(set) var pendingOAuthState: String?
 
+    /// 授权窗口已打开、正在等回调。UI 用它禁用重复点击。
+    public var isAwaitingOAuthCallback: Bool { pendingOAuthState != nil }
+
+    /// 取消后保留 state 等迟到回调，但不能无限等：超时后清掉，允许重新发起。
+    private var pendingStateExpiryTask: Task<Void, Never>?
+
     /// 开始一轮 OAuth：生成 state、拼授权页 URL。没配凭证返回 nil。
     public func beginOAuth() async -> URL? {
         guard supportsOAuth else { return nil }
+        // 已经有一轮在等回调：不要叠加新的授权窗口（系统会拒绝重复 present，
+        // 且后到的回调会与旧 state 打架）。直接把当前这轮交回调用方。
+        if let pendingOAuthState, let url = await oauth.makeAuthorizeURL(state: pendingOAuthState) {
+            Self.log.notice("begin: reusing in-flight OAuth round")
+            return url
+        }
         let state = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         guard let url = await oauth.makeAuthorizeURL(state: state) else { return nil }
         pendingOAuthState = state
+        schedulePendingStateExpiry()
         lastError = nil
         Self.log.info("begin: authorize at \(url.host ?? "?", privacy: .public), expecting callback \(self.oauthConfig.redirectURI, privacy: .public)")
         return url
@@ -176,13 +190,18 @@ public final class BangumiAuthStore {
         let code: String
         do {
             code = try Self.extractCode(from: url, expectedState: pendingOAuthState)
+        } catch BangumiAuthError.stateMismatch {
+            // 迟到的旧轮次回调：不消耗当前这一轮，等正确的回调到来。
+            Self.log.notice("callback state mismatch; keeping current round")
+            lastError = Self.describe(BangumiAuthError.stateMismatch)
+            return false
         } catch {
-            pendingOAuthState = nil
+            clearPendingState()
             lastError = Self.describe(error)
             Self.log.error("callback rejected: \(Self.describe(error), privacy: .public)")
             return false
         }
-        pendingOAuthState = nil
+        clearPendingState()
         return await login(authorizationCode: code)
     }
 
@@ -202,8 +221,33 @@ public final class BangumiAuthStore {
         return code
     }
 
-    /// 用户关掉了授权窗口 / 流程中断，清掉本轮 state。
+    /// 用户关掉了授权窗口 / 流程中断。
+    ///
+    /// **不清 `pendingOAuthState`**：系统取消窗口时，浏览器可能已经把回调 URL 交给
+    /// App 了（日志里就出现过 `cancelled by user` 后紧跟 `intercepted callback`）。
+    /// 清掉 state 会让这条迟到的回调被当成「没有进行中的授权」丢掉。
+    /// 下一轮 `beginOAuth` 会复用它，或由 `login` 成功后统一清空。
     public func cancelOAuth() {
+        Self.log.notice("cancel requested; keeping pending state for a late callback")
+        // 用户可能只是关了窗口；留 2 分钟给迟到的回调，之后允许重新发起。
+        schedulePendingStateExpiry(after: .seconds(120))
+    }
+
+    private func schedulePendingStateExpiry(after delay: Duration = .seconds(90)) {
+        pendingStateExpiryTask?.cancel()
+        pendingStateExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            if self.pendingOAuthState != nil {
+                self.pendingOAuthState = nil
+                Self.log.notice("pending OAuth state expired")
+            }
+        }
+    }
+
+    private func clearPendingState() {
+        pendingStateExpiryTask?.cancel()
+        pendingStateExpiryTask = nil
         pendingOAuthState = nil
     }
 

@@ -32,8 +32,24 @@ public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
     public var webDomain: URL { URL(string: "https://\(host)")! }
     public var imageDomain: URL { URL(string: "https://lain.\(host)")! }
 
-    public var authorizeURL: URL { webDomain.appendingPathComponent("/oauth/authorize") }
-    public var tokenURL: URL { apiDomain.appendingPathComponent("/oauth/access_token") }
+    /// 授权页固定走官方 bgm.tv。
+    ///
+    /// 镜像站（bangumi.lat）的网页前面有 Anubis 反机器人验证，授权链路经过它后
+    /// 回调参数容易变形 / 授权码超过 60 秒有效期，实测换 token 会 400。
+    /// OAuth 只在登录时用一次，固定官方最稳；镜像只承担日常 API 与图床。
+    public var authorizeURL: URL { URL(string: "https://bgm.tv/oauth/authorize")! }
+
+    /// 换 token 的地址，固定走官方。
+    ///
+    /// 实测镜像站只代理 `/v0/`：`api.bangumi.lat/oauth/access_token` 返回 400；
+    /// 网页镜像的 token 端点又被 Anubis 挡住。OAuth token 端点是 App 自己发的一次
+    /// 普通 HTTPS 请求，不需要用户直连，所以固定用官方地址即可。
+    public var tokenURL: URL { URL(string: "https://bgm.tv/oauth/access_token")! }
+
+    /// 短评 / 长评 / 角色 / 制作人员等网页 HTML 的地址。
+    ///
+    /// `api.bangumi.lat` 只代理 JSON API，网页内容要走网页镜像；官方则用 bgm.tv。
+    public var webPageBase: URL { URL(string: "https://bgm.tv")! }
 
     /// 把任意合法 host 规范化成站点（用户手动添加镜像时用）。
     public static func parse(_ raw: String) -> BangumiSite? {

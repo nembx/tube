@@ -4,7 +4,7 @@ import Testing
 
 /// `BangumiAuthStore` + `BangumiCollectionStore` 的行为：登录态、同步合并、
 /// 乐观更新与回滚、播放进度驱动的「看过」。全部用假 API，不碰网络与 Keychain。
-@Suite("BangumiCollectionStore")
+@Suite("BangumiCollectionStore", .serialized)
 @MainActor
 struct BangumiCollectionStoreTests {
 
@@ -265,7 +265,50 @@ struct BangumiCollectionStoreTests {
         #expect(!ok)
         #expect(!auth.isLoggedIn)
         #expect(auth.lastError == BangumiAuthError.stateMismatch.userMessage)
-        #expect(auth.pendingOAuthState == nil)
+        // 迟到的旧轮次回调不能消耗当前这一轮，否则真正的回调会被当成「没有进行中的授权」丢弃。
+        #expect(auth.pendingOAuthState != nil)
+    }
+
+    @Test("cancel keeps the round alive so a late callback can still log in")
+    func cancelThenLateCallback() async throws {
+        let api = FakeAccountAPI()
+        let defaults = UserDefaults(suiteName: "BangumiCollectionStoreTests.cancel.\(UUID().uuidString)")!
+        let session = URLSession.oauthStub { req in
+            #expect(req.jsonBody["code"] as? String == "late")
+            return (200, Data(#"{"access_token": "at", "expires_in": 604800, "refresh_token": "rt", "user_id": 7}"#.utf8))
+        }
+        let auth = BangumiAuthStore(
+            api: api,
+            oauthConfig: BangumiOAuthConfig(clientID: "cid", clientSecret: "sec", redirectURI: "nembx-tube://bangumi-auth"),
+            defaults: defaults,
+            storage: InMemoryTokenStorage(),
+            session: session
+        )
+        _ = try #require(await auth.beginOAuth())
+        // 模拟系统先报「用户取消」，随后浏览器才把回调交过来
+        auth.cancelOAuth()
+        #expect(auth.isAwaitingOAuthCallback)
+        let ok = await auth.handleCallbackURL(URL(string: "nembx-tube://bangumi-auth?code=late")!)
+        #expect(ok)
+        #expect(auth.isLoggedIn)
+        #expect(!auth.isAwaitingOAuthCallback)
+    }
+
+    @Test("beginning a second OAuth reuses the in-flight round instead of stacking windows")
+    func beginReusesRound() async throws {
+        let api = FakeAccountAPI()
+        let defaults = UserDefaults(suiteName: "BangumiCollectionStoreTests.reuse.\(UUID().uuidString)")!
+        let auth = BangumiAuthStore(
+            api: api,
+            oauthConfig: BangumiOAuthConfig(clientID: "cid", clientSecret: "sec", redirectURI: "nembx-tube://bangumi-auth"),
+            defaults: defaults,
+            storage: InMemoryTokenStorage()
+        )
+        let first = try #require(await auth.beginOAuth())
+        let state = auth.pendingOAuthState
+        let second = try #require(await auth.beginOAuth())
+        #expect(auth.pendingOAuthState == state)
+        #expect(first == second)
     }
 
     // MARK: - Sync

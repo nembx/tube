@@ -184,6 +184,11 @@ public actor BangumiOAuthClient {
             throw BangumiAPIError.transport(message: "non-HTTP response")
         }
         guard (200...299).contains(http.statusCode) else {
+            // 400 时 bgm 会在 body 里给出 error / error_description，打进日志便于定位。
+            let body = String(data: data, encoding: .utf8) ?? ""
+            BangumiAuthStore.log.error(
+                "token endpoint \(self.config.tokenURL.absoluteString, privacy: .public) returned \(http.statusCode): \(body.prefix(300), privacy: .public)"
+            )
             throw BangumiAPIError.http(status: http.statusCode)
         }
         do {

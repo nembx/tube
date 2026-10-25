@@ -20,7 +20,7 @@ struct BangumiSiteSettingsTests {
         #expect(site.imageDomain.absoluteString == "https://lain.bgm.tv")
         #expect(site.nextDomain?.absoluteString == "https://next.bgm.tv")
         #expect(site.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
-        #expect(site.tokenURL.absoluteString == "https://api.bgm.tv/oauth/access_token")
+        #expect(site.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
     }
 
     @Test("mirror site derives api/lain subdomains and has no next endpoint")
@@ -30,8 +30,9 @@ struct BangumiSiteSettingsTests {
         #expect(site.webDomain.absoluteString == "https://bangumi.lat")
         #expect(site.imageDomain.absoluteString == "https://lain.bangumi.lat")
         #expect(site.nextDomain == nil)
-        #expect(site.authorizeURL.absoluteString == "https://bangumi.lat/oauth/authorize")
-        #expect(site.tokenURL.absoluteString == "https://api.bangumi.lat/oauth/access_token")
+        // 授权页与换 token 固定官方：镜像网页有 Anubis 挑战，走镜像会 400。
+        #expect(site.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
+        #expect(site.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
     }
 
     @Test("parses hosts from URLs and rejects junk")
@@ -71,11 +72,11 @@ struct BangumiSiteSettingsTests {
     func oauthConfig() {
         let official = BangumiOAuthConfig.forSite(.official)
         #expect(official.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
-        #expect(official.tokenURL.absoluteString == "https://api.bgm.tv/oauth/access_token")
+        #expect(official.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
 
         let mirror = BangumiOAuthConfig.forSite(.mirrorLat)
-        #expect(mirror.authorizeURL.absoluteString == "https://bangumi.lat/oauth/authorize")
-        #expect(mirror.tokenURL.absoluteString == "https://api.bangumi.lat/oauth/access_token")
+        #expect(mirror.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
+        #expect(mirror.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
         // 凭证与回调地址不受站点影响
         #expect(mirror.redirectURI == official.redirectURI)
         #expect(mirror.clientID == official.clientID)

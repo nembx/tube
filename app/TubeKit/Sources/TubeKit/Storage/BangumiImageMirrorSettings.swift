@@ -23,8 +23,11 @@ public enum BangumiImageMirrorSettings {
     /// wsrv.nl 需要不带 scheme 的源地址作为 `url` 参数。
     public static let proxyStyleHosts: Set<String> = ["wsrv.nl", "images.weserv.nl"]
 
-    /// 会被改写的图床主机。
-    public static let mirroredHosts: Set<String> = ["lain.bgm.tv"]
+    /// 会被改写的图床主机。镜像站返回的本来就是 `lain.<镜像域名>`，
+    /// 也要认，否则在「直连 / wsrv」模式下镜像图片无法再被改写。
+    public static func isImageHost(_ host: String) -> Bool {
+        host == "lain.bgm.tv" || host.hasPrefix("lain.")
+    }
 
     /// `api.bgm.tv/v0/{kind}/{id}/image` 也是图片接口，一并改写。
     public static let apiImageKinds: Set<String> = ["subjects", "characters", "persons"]
@@ -52,7 +55,7 @@ public enum BangumiImageMirrorSettings {
 
     public static func shouldMirror(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
-        if mirroredHosts.contains(host) { return true }
+        if isImageHost(host) { return true }
         guard host == "api.bgm.tv" else { return false }
         // /v0/subjects/123/image
         let segments = url.path.split(separator: "/").map(String.init)

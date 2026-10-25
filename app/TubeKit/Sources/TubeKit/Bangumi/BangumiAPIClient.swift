@@ -134,7 +134,9 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
         self.site = site
         self.apiDomain = apiDomain ?? site.apiDomain
         self.nextDomain = nextDomain ?? site.nextDomain
-        self.webDomain = webDomain ?? site.webDomain
+        // 网页 HTML（短评 / 长评 / 单集吐槽）在镜像站上被 Anubis 拦，且 API 镜像不提供评论接口，
+        // 所以网页类内容固定走官方 bgm.tv；只有 JSON API 与图床跟随站点。
+        self.webDomain = webDomain ?? site.webPageBase
     }
 
     /// bgm 要求的 UA 形态：`{开发者}/{应用}/{版本} ({平台}) ({主页})`，用库默认 UA 可能被封。

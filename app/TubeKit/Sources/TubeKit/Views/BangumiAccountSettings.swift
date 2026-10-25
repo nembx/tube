@@ -136,12 +136,12 @@ struct BangumiAccountSettings: View {
                 HStack {
                     Label("用 Bangumi 账号登录", systemImage: "person.badge.key")
                     Spacer()
-                    if auth.isAuthenticating {
+                    if auth.isAuthenticating || auth.isAwaitingOAuthCallback {
                         ProgressView().controlSize(.small)
                     }
                 }
             }
-            .disabled(auth.isAuthenticating)
+            .disabled(auth.isAuthenticating || auth.isAwaitingOAuthCallback)
 
             DisclosureGroup("其他登录方式", isExpanded: $showsTokenLogin) {
                 tokenLoginRows
