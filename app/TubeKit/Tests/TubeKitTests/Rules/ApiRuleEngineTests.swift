@@ -265,7 +265,7 @@ struct ApiRuleEngineTests {
         #expect(roads[0].index == 1)
     }
 
-    @Test("TvTFun rule JSON decodes with api modes")
+    @Test("TvTFun rule JSON decodes with API search and XPath chapters")
     func decodeTvTFunRule() throws {
         let url = Bundle.tubeKit.url(
             forResource: "SeedRules/TvTFun",
@@ -277,9 +277,51 @@ struct ApiRuleEngineTests {
         let rule = try JSONDecoder().decode(TubeRule.self, from: data)
         #expect(rule.name == "TvTFun")
         #expect(rule.searchMode == .api)
-        #expect(rule.chapterMode == .api)
-        #expect(rule.searchApiConfig?.listPath == "$.data.videos[*]")
-        #expect(rule.chapterApiConfig?.episodePage?.url.contains("@slug") == true)
+        #expect(rule.chapterMode == .xpath)
+        #expect(rule.searchApiConfig?.listPath == "$.data.items[*]")
+        #expect(rule.searchApiConfig?.sourceTemplate == "https://www.tvtfun.net/watch/@source/1")
+    }
+
+    @Test("source templates encode ids and accept placeholders after letters")
+    func sourceTemplate() throws {
+        let results = try ApiRuleEngine.parseSearch(
+            data: Data(#"{"data":[{"name":"Demo","url":"a/b?c&d"}]}"#.utf8),
+            config: ApiSearchConfig(sourceTemplate: "https://example.com/GV@source"),
+            ruleName: "demo", chapterMode: .xpath, baseURL: "https://example.com/"
+        )
+        #expect(results.first?.detailURL.absoluteString == "https://example.com/GVa%2Fb%3Fc%26d")
+        #expect(throws: RestrictedJSONPath.FormatError.self) {
+            try ApiRuleEngine.validateSearchConfig(
+                ApiSearchConfig(sourceTemplate: "https://example.com/static")
+            )
+        }
+    }
+
+    @Test("JSON request bodies preserve types and safely substitute quoted keywords")
+    func typedBody() throws {
+        let raw = Data(#"""
+        {"method":"POST","url":"https://example.com/search","bodyType":"json",
+         "body":{"q":"@keyword","page":1,"enabled":true,"ratio":1.5,
+                 "nested":{"values":[false,null,"@keyword"]}}}
+        """#.utf8)
+        let decoded = try JSONDecoder().decode(ApiRequestConfig.self, from: raw)
+        let restored = try JSONDecoder().decode(
+            ApiRequestConfig.self, from: JSONEncoder().encode(decoded)
+        )
+        let keyword = "a\"b\\c\n&d"
+        let request = try ApiRuleEngine.prepareRequest(restored, variables: ["keyword": keyword])
+        let body = try #require(request.body)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(object["q"] as? String == keyword)
+        #expect(object["page"] as? Int == 1)
+        #expect(object["page"] as? String == nil)
+        #expect(object["enabled"] as? Bool == true)
+        #expect(object["ratio"] as? Double == 1.5)
+        let nested = try #require(object["nested"] as? [String: Any])
+        let values = try #require(nested["values"] as? [Any])
+        #expect(values[0] as? Bool == false)
+        #expect(values[1] is NSNull)
+        #expect(values[2] as? String == keyword)
     }
 }
 

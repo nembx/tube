@@ -8,7 +8,7 @@ tube-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串型
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 | --- | --- | --- | --- | --- |
-| `api` | **string** | ✓ | — | API 等级（`"1"` ~ `"9"`），声明本规则用到的最高级特性。客户端 < 这个等级时拒绝加载。 |
+| `api` | **string** | ✓ | — | API 等级（`"1"` ~ `"9"`），声明本规则用到的最高级特性。兼容性以客户端实际实现的字段为准。 |
 | `type` | string | ✓ | — | 当前固定为 `"anime"`。预留给未来的内容类型。 |
 | `name` | string | ✓ | — | 规则唯一 id；**必须与文件名（不含 `.json`）一致**。 |
 | `version` | **string** | ✓ | — | 字符串型版本号（如 `"1.0"`、`"2.3"`）；客户端按字符串相等判定"是否有更新"。 |
@@ -60,7 +60,12 @@ tube-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串型
 | `request.query` | query 字典，值可用 `@keyword` 等模板变量 |
 | `listPath` | 结果数组 JSONPath（如 `$.data.videos[*]`） |
 | `namePath` | 相对每条结果的标题路径（如 `$.name`） |
-| `sourcePath` | 相对每条结果的来源 id / URL 路径（如 `$.id`）；客户端会把它编码进 `detailURL`，章节请求里以 `@source` 回填 |
+| `sourcePath` | 相对每条结果的来源 id / URL 路径（如 `$.id`）；API 章节请求里以 `@source` 回填 |
+| `sourceTemplate` | 可选，默认空串。**API ≥ 9**。把来源 id / slug 转为详情地址，例如 `https://example.com/detail/@source.html`；非空时必须包含 `@source`，替换值按 URL component 编码，支持 `/GV@source` |
+
+当 `chapterMode = "xpath"` 时，API 搜索的来源（或 `sourceTemplate` 结果）按 `baseURL` 解析为网页详情 URL。例如 `mgnacg` 的 `baseURL = https://www.mgnacg.com/media/` 加 id `42` 得到 `/media/42`。当 `chapterMode = "api"` 时保留来源 id，供章节 API 请求使用。
+
+`request.bodyType` 支持 `json` / `form`。JSON `body` 保留数字、布尔、null、数组和嵌套对象类型，只在字符串值上替换模板变量；包含引号或反斜杠的关键字会被正确 JSON 转义。
 
 **`chapterApiConfig`：**
 
@@ -73,7 +78,7 @@ tube-rule 是一组共 20 个核心字段的 JSON 规则格式，用字符串型
 | `variables` | 从章节响应再抽命名变量（JSONPath → 模板变量，如 `slug`） |
 | `episodePage.url` / `episodePage.query` | 播放页模板；可用 `@slug` `@roadIndex` `@episodeIndex` `@source` 等 |
 
-参考规则：`rules/TvTFun.json`。
+参考规则：`rules/xfdmnext.json`（API 搜索及章节）、`rules/TvTFun.json`（API 搜索 + XPath 章节）。
 
 ### `cookies` / `videoURLPattern`（选流控制，API ≥ 9）
 
@@ -194,10 +199,14 @@ tube-rule **只支持 XPath**（不支持 CSS 选择器、不支持正则、不�
 
 - `//`-prefixed 表达式（绝对路径）
 - `@class='...'` / `@id='...'` 类的属性谓词
+- Kazumi 属性子串写法 `[@class*='value']`（也支持双引号），由客户端转换为 XPath 1.0 的 `[contains(@class, 'value')]`
+- `contains()`、`starts-with()` 和 `.//` 相对选择器
 - 位置步 `div[2]/a` / `li[1]`
 - 末尾 `/text()` 终止节点（取纯文本，自动 trim）
 
-XPath 引擎在客户端实现为 `Kanna` (libxml2) 包装。
+XPath 引擎在客户端实现为 `Kanna` (libxml2) 包装。上述属性子串语法是兼容转换，不代表支持任意 CSS 选择器。
+
+Kazumi 历史规则中的 `captchaType = 3` / `captchaScript`、`captchaDetectType` / `captchaDetectValue` 尚未实现；Tube 当前反爬流程依据图片/按钮 XPath 检测并交给用户在 WebView 中完成。此次上游 18 个有效规则均未启用这些脚本能力。
 
 ## `searchURL` 占位符
 

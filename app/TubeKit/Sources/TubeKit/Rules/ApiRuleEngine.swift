@@ -115,7 +115,9 @@ public enum ApiRuleEngine: Sendable {
     public static func parseSearch(
         data: Data,
         config: ApiSearchConfig,
-        ruleName: String
+        ruleName: String,
+        chapterMode: RuleMode = .api,
+        baseURL: String = ""
     ) throws -> [SearchResult] {
         try validateSearchConfig(config)
         let document = try decodeJSON(data)
@@ -126,9 +128,26 @@ public enum ApiRuleEngine: Sendable {
             let source = stringValue(
                 try RestrictedJSONPath.readFirst(node, expression: config.sourcePath)
             )
-            guard !name.isEmpty, !source.isEmpty,
-                let detailURL = detailURL(forSource: source)
-            else { continue }
+            guard !name.isEmpty, !source.isEmpty else { continue }
+            let template = config.sourceTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+            // 上游允许 /GV@source 这种紧跟字母的占位符，不能用通用模板正则。
+            let mappedSource = template.isEmpty ? source : template.replacingOccurrences(
+                of: "@source",
+                with: source.addingPercentEncoding(withAllowedCharacters: .tubeURLComponentAllowed)
+                    ?? source
+            )
+            let resolvedURL: URL?
+            if chapterMode == .xpath {
+                // API → XPath：数字 id 也必须基于规则 baseURL 变成可请求的网页 URL。
+                resolvedURL = URL(string: mappedSource, relativeTo: URL(string: baseURL))?.absoluteURL
+                guard let scheme = resolvedURL?.scheme?.lowercased(),
+                    scheme == "http" || scheme == "https",
+                    resolvedURL?.host != nil
+                else { continue }
+            } else {
+                resolvedURL = detailURL(forSource: mappedSource)
+            }
+            guard let detailURL = resolvedURL else { continue }
             results.append(
                 SearchResult(title: name, detailURL: detailURL, ruleName: ruleName)
             )
@@ -140,6 +159,10 @@ public enum ApiRuleEngine: Sendable {
         try RestrictedJSONPath.validate(config.listPath)
         try RestrictedJSONPath.validate(config.namePath)
         try RestrictedJSONPath.validate(config.sourcePath)
+        let template = config.sourceTemplate.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !template.isEmpty && !template.contains("@source") {
+            throw RestrictedJSONPath.FormatError("详情页地址模板必须引用 @source")
+        }
     }
 
     // MARK: - chapters
@@ -419,30 +442,41 @@ public enum ApiRuleEngine: Sendable {
         variables: [String: String]
     ) throws -> Data? {
         guard let bodyJSON = config.bodyJSON else { return nil }
-        // body may be a JSON object template with @vars as string values
-        let rendered = try renderTemplate(bodyJSON, variables: variables, encode: false)
+        // 在 JSON 值上替换，避免关键字中的引号、反斜杠破坏请求体，并保留数字/布尔值。
+        let object = try decodeJSON(Data(bodyJSON.utf8))
+        let rendered = try renderJSONValue(object, variables: variables)
         switch config.bodyType {
         case .json:
-            return rendered.data(using: .utf8)
+            return try JSONSerialization.data(withJSONObject: rendered, options: [.fragmentsAllowed])
         case .form:
-            // expect {"k":"v"} and encode as form
-            guard let data = rendered.data(using: .utf8),
-                let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else {
-                return rendered.data(using: .utf8)
+            guard let obj = rendered as? [String: Any] else {
+                throw RestrictedJSONPath.FormatError("表单请求体必须是 JSON 对象")
             }
             let pairs = obj.map { key, value -> String in
                 let ek =
-                    key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
+                    key.addingPercentEncoding(withAllowedCharacters: .tubeURLComponentAllowed) ?? key
                 let vs = stringValue(value)
                 let ev =
-                    vs.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? vs
+                    vs.addingPercentEncoding(withAllowedCharacters: .tubeURLComponentAllowed) ?? vs
                 return "\(ek)=\(ev)"
             }
             return pairs.joined(separator: "&").data(using: .utf8)
         case .none:
             return nil
         }
+    }
+
+    private static func renderJSONValue(_ value: Any, variables: [String: String]) throws -> Any {
+        if let string = value as? String {
+            return try renderTemplate(string, variables: variables, encode: false)
+        }
+        if let array = value as? [Any] {
+            return try array.map { try renderJSONValue($0, variables: variables) }
+        }
+        if let object = value as? [String: Any] {
+            return try object.mapValues { try renderJSONValue($0, variables: variables) }
+        }
+        return value
     }
 
     /// 替换模板中的 `@name` 占位符。`encode` 时对替换值做 URL encode（用于 URL path）。

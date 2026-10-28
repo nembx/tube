@@ -57,11 +57,11 @@ struct SeededRuleLoaderTests {
         let loader = SeededRuleLoader()
         let officialID = RuleSource.tubeRuleOfficial.id
 
-        // 模拟旧版本地：只有 LMM（已弃用）+ 一条仍有效的 AGE，缺 TvTFun 等新源
-        let staleLMM = TubeRule(
+        // 模拟旧版本地：只有 gugu3（上游已弃用）+ 一条仍有效的 AGE，缺新源。
+        let staleGugu3 = TubeRule(
             api: "6",
             type: "anime",
-            name: "LMM",
+            name: "gugu3",
             version: "2.0",
             muliSources: true,
             useWebview: true,
@@ -93,7 +93,7 @@ struct SeededRuleLoaderTests {
             chapterResult: "//li/a"
         )
         try await store.save([
-            .init(rule: staleLMM, sourceID: officialID, isEnabled: true),
+            .init(rule: staleGugu3, sourceID: officialID, isEnabled: true),
             .init(rule: oldAGE, sourceID: officialID, isEnabled: false),
         ])
 
@@ -101,7 +101,8 @@ struct SeededRuleLoaderTests {
         let after = try await store.load()
         let names = Set(after.map(\.rule.name))
 
-        #expect(!names.contains("LMM"), "弃用的官方种子应被卸掉")
+        #expect(!names.contains("gugu3"), "弃用的官方种子应被卸掉")
+        #expect(names.isSuperset(of: ["LMM", "TvTFun", "xfdmnext"]), "恢复的源应自动安装")
         #expect(names.contains("AGE"))
         #expect(names.contains("7sefun"), "种子里的新源应被装上")
         #expect(names.contains("DM84"))
@@ -110,6 +111,11 @@ struct SeededRuleLoaderTests {
         let age = after.first { $0.rule.name == "AGE" }
         #expect(age?.isEnabled == false)
         #expect(age?.rule.version != "0.1")
+
+        try await loader.reconcileOfficialSeed(into: store)
+        let repeated = try await store.load()
+        #expect(repeated.map(\.rule) == after.map(\.rule), "重复同步不能重复安装")
+        #expect(repeated.map(\.isEnabled) == after.map(\.isEnabled), "保留启用状态")
 
         // 自定义源规则不应被误删
         let custom = TubeRule(

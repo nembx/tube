@@ -17,7 +17,7 @@ public final class KannaXPathHTMLDocument: XPathHTMLDocument, @unchecked Sendabl
     }
 
     public func xpath(_ expression: String) -> [XPathHTMLNode] {
-        let xpath = document.xpath(expression)
+        let xpath = document.xpath(KazumiXPath.normalize(expression))
         return xpath.compactMap { node -> XPathHTMLNode? in
             KannaXPathNode(node: node)
         }
@@ -46,8 +46,31 @@ final class KannaXPathNode: XPathHTMLNode, @unchecked Sendable {
     }
 
     func xpath(_ expression: String) -> [XPathHTMLNode] {
-        node.xpath(expression).compactMap { (n: Kanna.XMLElement) -> XPathHTMLNode? in
+        node.xpath(KazumiXPath.normalize(expression)).compactMap { (n: Kanna.XMLElement) -> XPathHTMLNode? in
             KannaXPathNode(node: n)
         }
+    }
+}
+
+/// Kazumi 的 XPath 库支持 CSS 风格的属性子串比较，libxml2 需要 contains()。
+private enum KazumiXPath {
+    // 先匹配完整字符串字面量，避免改写引号内碰巧出现的 @attr*= 文本。
+    private static let attributeContains = try! NSRegularExpression(
+        pattern: #"'[^']*'|"[^"]*"|@([A-Za-z_][A-Za-z0-9_.:-]*)\s*\*=\s*('[^']*'|"[^"]*")"#
+    )
+
+    static func normalize(_ expression: String) -> String {
+        let text = expression as NSString
+        let matches = attributeContains.matches(
+            in: expression, range: NSRange(location: 0, length: text.length)
+        )
+        var result = expression
+        for match in matches.reversed() where match.range(at: 1).location != NSNotFound {
+            guard let range = Range(match.range, in: result) else { continue }
+            let attribute = text.substring(with: match.range(at: 1))
+            let value = text.substring(with: match.range(at: 2))
+            result.replaceSubrange(range, with: "contains(@\(attribute), \(value))")
+        }
+        return result
     }
 }

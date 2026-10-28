@@ -115,12 +115,9 @@ public struct ApiRequestConfig: Codable, Hashable, Sendable {
         )
         if let body = try? c.decodeIfPresent(String.self, forKey: .body) {
             bodyJSON = body
-        } else if c.contains(.body),
-            let obj = try? c.decode([String: StringConvertibleValue].self, forKey: .body)
-        {
-            let dict = obj.mapValues(\.value)
+        } else if let body = try c.decodeIfPresent(RuleJSONValue.self, forKey: .body) {
             bodyJSON = String(
-                data: try JSONSerialization.data(withJSONObject: dict),
+                data: try JSONEncoder().encode(body),
                 encoding: .utf8
             )
         } else {
@@ -137,9 +134,9 @@ public struct ApiRequestConfig: Codable, Hashable, Sendable {
         if bodyType != .none { try c.encode(bodyType.rawValue, forKey: .bodyType) }
         if let bodyJSON, bodyType != .none {
             if let data = bodyJSON.data(using: .utf8),
-                let obj = try? JSONSerialization.jsonObject(with: data)
+                let obj = try? JSONDecoder().decode(RuleJSONValue.self, from: data)
             {
-                try c.encode(AnyEncodableJSON(obj), forKey: .body)
+                try c.encode(obj, forKey: .body)
             } else {
                 try c.encode(bodyJSON, forKey: .body)
             }
@@ -153,17 +150,34 @@ public struct ApiSearchConfig: Codable, Hashable, Sendable {
     public var listPath: String
     public var namePath: String
     public var sourcePath: String
+    /// Kazumi API 9：将搜索返回的 id / slug 映射为详情页地址。
+    public var sourceTemplate: String
 
     public init(
         request: ApiRequestConfig = ApiRequestConfig(),
         listPath: String = "$.data[*]",
         namePath: String = "$.name",
-        sourcePath: String = "$.url"
+        sourcePath: String = "$.url",
+        sourceTemplate: String = ""
     ) {
         self.request = request
         self.listPath = listPath
         self.namePath = namePath
         self.sourcePath = sourcePath
+        self.sourceTemplate = sourceTemplate
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case request, listPath, namePath, sourcePath, sourceTemplate
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        request = try c.decode(ApiRequestConfig.self, forKey: .request)
+        listPath = try c.decode(String.self, forKey: .listPath)
+        namePath = try c.decode(String.self, forKey: .namePath)
+        sourcePath = try c.decode(String.self, forKey: .sourcePath)
+        sourceTemplate = try c.decodeIfPresent(String.self, forKey: .sourceTemplate) ?? ""
     }
 }
 
@@ -272,24 +286,37 @@ public struct ApiChapterConfig: Codable, Hashable, Sendable {
     }
 }
 
-/// 编码任意 JSON 值（仅用于 `ApiRequestConfig.encode`）。
-private struct AnyEncodableJSON: Encodable {
-    let value: Any
-    init(_ value: Any) { self.value = value }
+/// 请求体保留 JSON 类型；分页参数不能像 query 一样被转换成字符串。
+private enum RuleJSONValue: Codable {
+    case null
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case string(String)
+    case array([RuleJSONValue])
+    case object([String: RuleJSONValue])
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let value = try? c.decode(Bool.self) { self = .bool(value) }
+        else if let value = try? c.decode(Int.self) { self = .int(value) }
+        else if let value = try? c.decode(Double.self) { self = .double(value) }
+        else if let value = try? c.decode(String.self) { self = .string(value) }
+        else if let value = try? c.decode([RuleJSONValue].self) { self = .array(value) }
+        else { self = .object(try c.decode([String: RuleJSONValue].self)) }
+    }
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        switch value {
-        case let v as String: try container.encode(v)
-        case let v as Int: try container.encode(v)
-        case let v as Double: try container.encode(v)
-        case let v as Bool: try container.encode(v)
-        case let v as [String: Any]:
-            try container.encode(v.mapValues { AnyEncodableJSON($0) })
-        case let v as [Any]:
-            try container.encode(v.map { AnyEncodableJSON($0) })
-        default:
-            try container.encodeNil()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .int(let value): try container.encode(value)
+        case .double(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
         }
     }
 }

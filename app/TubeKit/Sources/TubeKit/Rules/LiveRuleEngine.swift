@@ -54,7 +54,9 @@ public final class LiveRuleEngine: RuleEngine, Sendable {
             return try ApiRuleEngine.parseSearch(
                 data: data,
                 config: config,
-                ruleName: rule.name
+                ruleName: rule.name,
+                chapterMode: rule.chapterMode,
+                baseURL: rule.baseURL
             )
         } catch let error as RestrictedJSONPath.FormatError {
             throw RuleEngineError.parse(message: error.message, rule: rule.name)

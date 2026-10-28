@@ -5,6 +5,20 @@ import Testing
 @Suite("XPath subset on Kanna")
 struct RuleEngineXPathSubsetTests {
 
+    @Test("Kazumi attribute substring predicates work on documents and nodes")
+    func kazumiAttributeContains() throws {
+        let doc = try KannaXPathHTMLDocument(html: """
+        <html><body><ol class='prefix tvt-watch-episodes suffix'>
+          <li><a class='episode-link' href='/watch/demo/1'>第1集</a></li>
+        </ol><ol class='unrelated'><li>Unrelated</li></ol>
+        <div data-note="@class*='literal'">Literal</div></body></html>
+        """)
+        let roads = doc.xpath("//ol[@class*='tvt-watch-episodes']")
+        #expect(roads.count == 1)
+        #expect(roads.first?.xpath(".//a[@class *= \"episode\"]").first?["href"] == "/watch/demo/1")
+        #expect(doc.xpath(#"//div[@data-note="@class*='literal'"]"#).count == 1)
+    }
+
     @Test("class predicate matches")
     func classPredicate() throws {
         let html = """

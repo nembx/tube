@@ -15,9 +15,9 @@ Tube App 默认从本仓库拉取规则；用户也可以在 App 内添加任意
 
 要说清楚的几件事：
 
-- **规则格式完全兼容。** Tube 直接采用了 Kazumi 的规则协议（`api` / `muliSources` / `searchList` / `chapterRoads` 等字段，含历史拼写 `muliSources` 少一个 `t` 的原样保留）。**Kazumi 的规则可以直接拿到 Tube 用，反之亦然。**
+- **核心规则格式兼容。** Tube 采用 Kazumi 的 JSON 协议（含历史拼写 `muliSources`），支持 XPath、JSON API、API 搜索转网页详情的 `sourceTemplate`。本次对齐上游有效规则所需能力；不保证所有历史规则和未来扩展都能执行，例如 `captchaScript` 自动验证脚本尚不支持。格式兼容也不代表站点实时可用。
 - **绝大多数规则的原始作者是 Kazumi 社区。** `rules/` 下的规则文件及其 XPath 表达式来自上游及其贡献者，规则快照继承自 Cezzu；可按下文流程从 KazumiRules 同步新增规则与修正。
-- **API 等级沿用上游编号。** 上游 README 的能力表只列到 API 5，但上游规则里实际已经出现 6 / 7 / 8 级；本仓库沿用同一套编号，并在 [`docs/rule-format.md`](./docs/rule-format.md) 里补齐了 6（`antiCrawlerConfig` 验证码流程）与 8（`searchMode` / `chapterMode` 的 JSON API + JSONPath 模式）的字段语义 —— 这是 tube-rule 字段定义的唯一权威文档。
+- **API 等级沿用上游编号。** 当前同步规则最高为 API 9，包含 `sourceTemplate` 详情页模板。字段语义见 [`docs/rule-format.md`](./docs/rule-format.md)。
 - **同步是单向的。** 本仓库从上游拉取，不往上游推；Tube 客户端的行为差异（如反爬走内置 WKWebView sheet）只写在本仓库文档里，不改动规则文件本身。
 - **许可证一致，署名保留。** 上游 MIT，本仓库同样 MIT，并在 [`LICENSE`](./LICENSE) 中保留 `Copyright (c) 2024 Predidit` 的原始版权声明。
 
@@ -69,30 +69,18 @@ tube-rule/
 
 `index.json` 只收录**未弃用**的规则（`"deprecated": true` 的条目会被脚本自动剔除，但文件本身作为历史保留在 `rules/` 下）。
 
-| 规则 | 版本 | 反爬 | 最近更新 |
-| --- | --- | --- | --- |
-| `7sefun` | 1.3 | — | 2026-09-01 |
-| `aafun` | 1.2 | — | 2026-09-01 |
-| `AGE` | 1.5 | — | 2026-09-01 |
-| `akianime` | 1.4 | — | 2026-09-01 |
-| `baimao` | 1.0 | — | 2026-09-01 |
-| `dalvdm` | 1.0 | ✅ | 2026-09-01 |
-| `DM84` | 1.4 | — | 2026-09-01 |
-| `ezdmw` | 1.2 | — | 2026-09-01 |
-| `giriGiriLove` | 2.4 | ✅ | 2026-09-01 |
-| `gugu3` | 1.3 | — | 2026-09-01 |
-| `mgnacg` | 1.0 | ✅ | 2026-09-01 |
-| `moonci` | 1.0 | — | 2026-09-01 |
-| `mutefun` | 1.2 | ✅ | 2026-09-01 |
-| `MXdm` | 2.3 | — | 2026-09-01 |
-| `sorani` | 1.0 | — | 2026-09-01 |
-| `xfdmneo` | 1.1 | — | 2026-09-01 |
+本次同步于 **2026-10-28**，基于 [KazumiRules `4f93eec`](https://github.com/Predidit/KazumiRules/tree/4f93eec10acabfeeaa2b687857b03d0766977d0f)。
 
-> 以下状态继承自上游，并非 Tube 的实时可用性验证。共 85 个规则文件，其中 17 个在索引中可用，68 个已弃用（站点失效 / 改版）。资源站生命周期普遍很短，弃用是常态。
+- 新增启用：`LMM 2.3`、`TvTFun 1.3`、`xfdmnext 1.1`（从旧的弃用快照恢复）。
+- 更新已有源：`MXdm 2.4`、`dalvdm 1.2`、`giriGiriLove 2.6`、`mgnacg 1.2`、`moonci 1.1`、`mutefun 1.5`。
+- 跟随上游弃用 `gugu3`，保留规则文件供追溯。
+- 保留 Tube 单独修复的 `yinghua 1.3`，不覆盖为上游已弃用的旧域名规则。
+
+共 **85 个规则文件，19 个启用条目，66 个弃用条目**。上游索引有 18 个启用条目，加上 Tube 的 `yinghua` 共 19 个。详细变更和验证范围见 [同步记录](./docs/kazumi-sync-2026-10-28.md)。
 
 ## API 等级
 
-规则用字符串型 `api` 字段声明自己用到的最高级特性；客户端支持等级低于它时会拒绝加载该规则。
+规则用字符串型 `api` 字段声明自己用到的最高级特性；实际兼容性取决于客户端是否实现所用字段，不能仅凭等级或 JSON 解码成功判断。
 
 | API | 引入的能力 | 对应字段 |
 | --- | --- | --- |
@@ -104,6 +92,7 @@ tube-rule/
 | 6 | 反爬 / 验证码流程 | `antiCrawlerConfig` |
 | 7 | 客户端能力位，未引入新字段 | — |
 | 8 | JSON API + JSONPath 模式 | `searchMode` / `chapterMode` / `searchApiConfig` / `chapterApiConfig` |
+| 9 | 搜索详情页模板；Tube 的选流扩展 | `searchApiConfig.sourceTemplate` / `cookies` / `videoURLPattern` |
 
 字段的完整语义见 [`docs/rule-format.md`](./docs/rule-format.md)。
 
@@ -144,7 +133,16 @@ git clone --depth 1 https://github.com/Predidit/KazumiRules /tmp/KazumiRules
 ./scripts/update_index.swift
 ```
 
-上游把规则平铺在仓库根目录，本仓库统一放在 `rules/` 下，这是唯一的结构差异。
+上游把规则平铺在仓库根目录，本仓库统一放在 `rules/` 下。同步时要保留本地独立修复和扩展字段，并核对上游的弃用状态。运行 `./scripts/update_index.swift` 后，再从仓库根目录运行 `bash app/scripts/sync_seed_rules.sh`，确保 App 离线种子与规则库一致。
+
+也可以在 App 中添加 Kazumi 官方自定义源：
+
+```
+索引  https://raw.githubusercontent.com/Predidit/KazumiRules/main/index.json
+规则  https://raw.githubusercontent.com/Predidit/KazumiRules/main/
+```
+
+注意规则地址直接指向仓库根目录，不要添加 `rules/`。
 
 ## 免责声明
 
