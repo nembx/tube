@@ -107,7 +107,8 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
 
     let session: URLSession
     let userAgent: String
-    /// 只有官方站点有 next.bgm.tv 的热门接口；镜像站为 nil，热门回落到 API 搜索。
+    /// next.<host> 的 /p1 接口（热门、短评、长评、单集吐槽）。镜像站同样代理；
+    /// 只有测试显式注入 nil 时，热门才回落到 API 搜索、评论才回落到网页抓取。
     private let nextDomain: URL?
     let apiDomain: URL
     private let webDomain: URL
@@ -134,8 +135,8 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
         self.site = site
         self.apiDomain = apiDomain ?? site.apiDomain
         self.nextDomain = nextDomain ?? site.nextDomain
-        // 网页 HTML（短评 / 长评 / 单集吐槽）在镜像站上被 Anubis 拦，且 API 镜像不提供评论接口，
-        // 所以网页类内容固定走官方 bgm.tv；只有 JSON API 与图床跟随站点。
+        // 网页 HTML 只在 /p1 接口失败时作回落；镜像站的网页层在 Anubis 之后抓不到，
+        // 所以回落固定抓官方 bgm.tv。JSON API、/p1 与图床都跟随站点。
         self.webDomain = webDomain ?? site.webPageBase
     }
 
@@ -154,7 +155,7 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
     // MARK: - Trending (next.bgm.tv)
 
     public func trending(limit: Int = 24, offset: Int = 0) async throws -> [BangumiItem] {
-        // 镜像站没有 next.bgm.tv：用 API 按收藏人数排序近似「热门」。
+        // 没有 next 域（只在测试显式注入 nil 时发生）：用 API 按收藏人数排序近似「热门」。
         guard let nextDomain else {
             return try await searchSubjects(
                 keyword: "",
@@ -296,12 +297,51 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
         }
     }
 
+    // MARK: - 短评 / 长评 / 单集吐槽（next.<host> 的 /p1 JSON；网页抓取只作回落）
+    //
+    // 以前三者都抓 bgm.tv 网页：镜像站的网页层在 Anubis 之后，App 抓不到，
+    // 于是选了镜像的用户看评论还得翻墙。/p1 接口镜像站是代理的（2026-10 实测
+    // next.bangumi.lat 与 next.bgm.tv 逐字节一致），JSON 也比 XPath 稳得多。
+    // 接口失败才回落到网页；取消要原样抛出，不能被回落吞掉。
+
     public func fetchComments(subjectID: Int) async throws -> [BangumiSubjectComment] {
+        if let nextDomain {
+            do {
+                let req = try makeP1Request(
+                    nextDomain,
+                    path: "/p1/subjects/\(subjectID)/comments",
+                    query: [URLQueryItem(name: "limit", value: "20"), URLQueryItem(name: "offset", value: "0")]
+                )
+                let data = try await perform(req)
+                return try Self.decodeP1(P1ListEnvelope<P1SubjectComment>.self, from: data)
+                    .data.compactMap(Self.subjectComment)
+            } catch BangumiAPIError.cancelled {
+                throw BangumiAPIError.cancelled
+            } catch {
+                // 回落到网页抓取
+            }
+        }
         let html = try await fetchWebHTML(path: "/subject/\(subjectID)/comments")
         return try parseComments(html: html)
     }
 
     public func fetchReviews(subjectID: Int) async throws -> [BangumiSubjectReview] {
+        if let nextDomain {
+            do {
+                let req = try makeP1Request(
+                    nextDomain,
+                    path: "/p1/subjects/\(subjectID)/reviews",
+                    query: [URLQueryItem(name: "limit", value: "20"), URLQueryItem(name: "offset", value: "0")]
+                )
+                let data = try await perform(req)
+                return try Self.decodeP1(P1ListEnvelope<P1Review>.self, from: data)
+                    .data.compactMap(review)
+            } catch BangumiAPIError.cancelled {
+                throw BangumiAPIError.cancelled
+            } catch {
+                // 回落到网页抓取
+            }
+        }
         let html = try await fetchWebHTML(path: "/subject/\(subjectID)/reviews")
         return try parseReviews(html: html)
     }
@@ -331,8 +371,136 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
     }
 
     public func fetchEpisodeComments(episodeID: Int) async throws -> [BangumiEpisodeComment] {
+        if let nextDomain {
+            do {
+                let req = try makeP1Request(nextDomain, path: "/p1/episodes/\(episodeID)/comments")
+                let data = try await perform(req)
+                return Self.episodeComments(try Self.decodeP1([P1EpisodeComment].self, from: data))
+            } catch BangumiAPIError.cancelled {
+                throw BangumiAPIError.cancelled
+            } catch {
+                // 回落到网页抓取
+            }
+        }
         let html = try await fetchWebHTML(path: "/ep/\(episodeID)")
         return try parseEpisodeComments(html: html)
+    }
+
+    private func makeP1Request(_ nextDomain: URL, path: String, query: [URLQueryItem] = []) throws -> URLRequest {
+        var components = URLComponents(url: nextDomain.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+        if !query.isEmpty { components?.queryItems = query }
+        guard let url = components?.url else { throw BangumiAPIError.invalidURL }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        applyHeaders(to: &req)
+        return req
+    }
+
+    private static func decodeP1<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            throw BangumiAPIError.decoding(message: String(describing: error))
+        }
+    }
+
+    /// 短评的收藏状态文案，和网页上 `small.grey` 里的字一致。
+    private static let p1CollectionLabels: [Int: String] = [1: "想看", 2: "看过", 3: "在看", 4: "搁置", 5: "抛弃"]
+
+    private static func subjectComment(_ raw: P1SubjectComment) -> BangumiSubjectComment? {
+        let body = (raw.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+        let rate = raw.rate ?? 0
+        return BangumiSubjectComment(
+            id: String(raw.id),
+            authorName: raw.user?.displayName ?? "",
+            avatarURL: raw.user?.avatarURL,
+            stateLabel: p1CollectionLabels[raw.type ?? 0] ?? "",
+            // 视图把 "stars" 换成 ★，和网页 class 名保持同一形态。
+            ratingLabel: rate > 0 ? "stars\(rate)" : "",
+            publishedAt: p1DateString(raw.updatedAt),
+            body: body
+        )
+    }
+
+    private func review(_ raw: P1Review) -> BangumiSubjectReview? {
+        let title = (raw.entry.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let replies = raw.entry.replies ?? 0
+        return BangumiSubjectReview(
+            id: String(raw.entry.id),
+            title: title,
+            authorName: raw.user?.displayName ?? "",
+            avatarURL: raw.user?.avatarURL,
+            publishedAt: Self.p1DateString(raw.entry.createdAt),
+            replyCount: replies > 0 ? "\(replies) 回复" : "",
+            summary: (raw.entry.summary ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+            // 全文在浏览器里打开：浏览器能过 Anubis，镜像用户就用镜像站的网页。
+            url: site.webDomain.appendingPathComponent("/blog/\(raw.entry.id)")
+        )
+    }
+
+    /// 楼层按返回顺序编号（`#1`、`#1-1`），和网页上的写法一致。
+    /// 被删除的楼（state 6 用户删 / 7 管理删）网页上也不显示正文，直接丢掉。
+    private static func episodeComments(_ raw: [P1EpisodeComment]) -> [BangumiEpisodeComment] {
+        var result: [BangumiEpisodeComment] = []
+        for item in raw where !isDeleted(item) {
+            let floor = "#\(result.count + 1)"
+            let (body, images) = p1Body(item.content ?? "")
+            var replies: [BangumiEpisodeComment] = []
+            for reply in item.replies ?? [] where !isDeleted(reply) {
+                let (replyBody, replyImages) = p1Body(reply.content ?? "")
+                guard !(replyBody.isEmpty && replyImages.isEmpty) else { continue }
+                replies.append(BangumiEpisodeComment(
+                    id: String(reply.id),
+                    floor: "\(floor)-\(replies.count + 1)",
+                    authorName: reply.user?.displayName ?? "",
+                    avatarURL: reply.user?.avatarURL,
+                    publishedAt: p1DateString(reply.createdAt),
+                    body: replyBody,
+                    imageURLs: replyImages
+                ))
+            }
+            guard !(body.isEmpty && images.isEmpty && replies.isEmpty) else { continue }
+            result.append(BangumiEpisodeComment(
+                id: String(item.id),
+                floor: floor,
+                authorName: item.user?.displayName ?? "",
+                avatarURL: item.user?.avatarURL,
+                publishedAt: p1DateString(item.createdAt),
+                body: body,
+                imageURLs: images,
+                replies: replies
+            ))
+        }
+        return result
+    }
+
+    private static func isDeleted(_ item: P1EpisodeComment) -> Bool {
+        item.state == 6 || item.state == 7
+    }
+
+    /// /p1 的正文是 BBCode：`[img]…[/img]` 拆成图片列表，其余当文本。
+    /// 和网页抓取一样只收用户贴的图，`(bgm38)` 这类表情留在文本里。
+    /// Regex 不是 Sendable，不能放 static；每次现建，正文很短，开销可忽略。
+    private static func p1Body(_ content: String) -> (body: String, images: [URL]) {
+        let p1ImageTag = /\[img\](.*?)\[\/img\]/.ignoresCase()
+        var images: [URL] = []
+        for match in content.matches(of: p1ImageTag) {
+            let raw = String(match.1).trimmingCharacters(in: .whitespacesAndNewlines)
+            if let url = URL(string: raw) { images.append(url) }
+        }
+        let body = content.replacing(p1ImageTag, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return (body, images)
+    }
+
+    /// 和网页上的时间形态对齐（`2024-4-9 22:20`）。
+    private static func p1DateString(_ unix: Int?) -> String {
+        guard let unix, unix > 0 else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-M-d HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     private struct EpisodesEnvelope: Decodable {
@@ -675,6 +843,68 @@ public actor BangumiAPIClient: BangumiAPIClientProtocol {
 }
 
 // MARK: - Envelopes
+
+/// next.<host>/p1 的列表外壳：`{ "data": [...], "total": n }`。
+private struct P1ListEnvelope<Item: Decodable>: Decodable {
+    let data: [Item]
+}
+
+private struct P1User: Decodable {
+    let nickname: String?
+    let username: String?
+    let avatar: Avatar?
+
+    struct Avatar: Decodable {
+        let large: String?
+        let medium: String?
+        let small: String?
+    }
+
+    var displayName: String {
+        let name = (nickname ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? (username ?? "") : name
+    }
+
+    var avatarURL: URL? {
+        for candidate in [avatar?.large, avatar?.medium, avatar?.small] {
+            if let candidate, !candidate.isEmpty, let url = URL(string: candidate) { return url }
+        }
+        return nil
+    }
+}
+
+private struct P1SubjectComment: Decodable {
+    let id: Int
+    let user: P1User?
+    /// 收藏状态：1 想看 2 看过 3 在看 4 搁置 5 抛弃。
+    let type: Int?
+    let rate: Int?
+    let comment: String?
+    let updatedAt: Int?
+}
+
+private struct P1Review: Decodable {
+    let id: Int
+    let user: P1User?
+    let entry: Entry
+
+    struct Entry: Decodable {
+        let id: Int
+        let title: String?
+        let summary: String?
+        let replies: Int?
+        let createdAt: Int?
+    }
+}
+
+private struct P1EpisodeComment: Decodable {
+    let id: Int
+    let content: String?
+    let createdAt: Int?
+    let state: Int?
+    let user: P1User?
+    let replies: [P1EpisodeComment]?
+}
 
 private struct TrendingEnvelope: Decodable {
     let data: [TrendingItem]

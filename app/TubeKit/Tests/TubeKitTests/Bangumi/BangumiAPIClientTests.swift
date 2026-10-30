@@ -15,6 +15,85 @@ struct BangumiAPIClientTests {
     // 这些用例打网络桩，必须留在本 suite 里：`.serialized` 只在 suite 内部生效，
     // 另起一个 suite 会和这里并发跑，抢同一个 `StubURLProtocol.handler` 静态字段。
 
+    // MARK: - 短评 / 长评 / 单集吐槽走 next.<host>/p1
+
+    @Test("comments come from next.<host>/p1 and map state, rating and author")
+    func commentsFromP1() async throws {
+        let session = URLSession.stub { req in
+            #expect(req.url?.host == "next.bgm.tv")
+            #expect(req.url?.path == "/p1/subjects/328609/comments")
+            return (200, Data(BangumiP1Fixtures.subjectComments.utf8))
+        }
+        let comments = try await BangumiAPIClient(session: session).fetchComments(subjectID: 328609)
+        let first = try #require(comments.first)
+        #expect(first.authorName == "ローゲリウス")
+        #expect(first.stateLabel == "看过")
+        #expect(first.ratingLabel == "stars6")
+        #expect(first.body == "没懂这个好看的地方在哪里？")
+        #expect(first.avatarURL?.host == "lain.bangumi.lat")
+        #expect(!first.publishedAt.isEmpty)
+        // 只有评分没有文字的那条不出现，和网页短评列表一致。
+        #expect(comments.count == 1)
+    }
+
+    /// 回归：选了镜像站的用户以前看评论还要翻墙 —— 评论抓的是 bgm.tv 网页。
+    /// 镜像站代理 /p1，评论必须从 next.<镜像> 拿，不能再碰官方网页。
+    @Test("mirror site reads comments from next.bangumi.lat, never from bgm.tv pages")
+    func mirrorCommentsStayOnMirror() async throws {
+        let session = URLSession.stub { req in
+            #expect(req.url?.host == "next.bangumi.lat")
+            return (200, Data(BangumiP1Fixtures.subjectComments.utf8))
+        }
+        let client = BangumiAPIClient(session: session, site: .mirrorLat)
+        let comments = try await client.fetchComments(subjectID: 328609)
+        #expect(comments.count == 1)
+    }
+
+    @Test("a failing /p1 endpoint falls back to scraping the official page")
+    func p1FailureFallsBackToWebPage() async throws {
+        let session = URLSession.stub { req in
+            if req.url?.host?.hasPrefix("next.") == true { return (500, Data()) }
+            #expect(req.url?.host == "bgm.tv")
+            return (200, Data(BangumiP1Fixtures.commentsPageHTML.utf8))
+        }
+        let comments = try await BangumiAPIClient(session: session, site: .mirrorLat).fetchComments(subjectID: 1)
+        #expect(comments.first?.authorName == "Alice")
+        #expect(comments.first?.stateLabel == "看过")
+    }
+
+    @Test("episode comments number floors, nest replies, split out images and drop deleted posts")
+    func episodeCommentsFromP1() async throws {
+        let session = URLSession.stub { req in
+            #expect(req.url?.path == "/p1/episodes/1128641/comments")
+            return (200, Data(BangumiP1Fixtures.episodeComments.utf8))
+        }
+        let comments = try await BangumiAPIClient(session: session).fetchEpisodeComments(episodeID: 1128641)
+        #expect(comments.count == 1)
+        let top = try #require(comments.first)
+        #expect(top.floor == "#1")
+        #expect(top.authorName == "Earendil_C")
+        #expect(top.body == "上推看到翻译")
+        #expect(top.imageURLs.map(\.absoluteString) == ["https://img.example.com/a.jpg"])
+        #expect(top.replies.count == 1)
+        #expect(top.replies.first?.floor == "#1-1")
+        #expect(top.replies.first?.body == "太可爱了")
+    }
+
+    @Test("reviews map the entry and link to the selected site's blog page")
+    func reviewsFromP1() async throws {
+        let session = URLSession.stub { req in
+            #expect(req.url?.path == "/p1/subjects/328609/reviews")
+            return (200, Data(BangumiP1Fixtures.reviews.utf8))
+        }
+        let reviews = try await BangumiAPIClient(session: session, site: .mirrorLat).fetchReviews(subjectID: 328609)
+        let review = try #require(reviews.first)
+        #expect(review.title == "女权战士也想让吉田恵里香滚蛋")
+        #expect(review.authorName == "南")
+        #expect(review.replyCount == "3 回复")
+        #expect(review.url?.host == "bangumi.lat")
+        #expect(review.url?.path == "/blog/381825")
+    }
+
     /// 回归场景：一个只有旧接口能召回的条目，v0 返回空也必须出现在结果里。
     @Test("search surfaces subjects that v0 hides from anonymous clients")
     func searchIncludesLegacyOnlySubject() async throws {
@@ -540,9 +619,11 @@ struct BangumiAPIClientTests {
         #expect(episodes[1].displayTitle == "踏み出す勇気")
     }
 
-    @Test("fetchEpisodeComments parses top-level floors from the episode page")
+    /// 网页抓取现在只是 /p1 失败后的回落：先让 next.<host> 挂掉，再验证网页解析。
+    @Test("fetchEpisodeComments parses top-level floors from the episode page when /p1 is down")
     func fetchEpisodeCommentsParsesFloors() async throws {
         let session = URLSession.stub { req in
+            if req.url?.host?.hasPrefix("next.") == true { return (503, Data()) }
             #expect(req.url?.host == "bgm.tv")
             #expect(req.url?.path == "/ep/1303316")
             return (200, Data(BangumiEpisodePageFixtures.commentList.utf8))
@@ -785,4 +866,45 @@ final class FailingStubURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+// MARK: - next.<host>/p1 fixtures（按 2026-10 真实返回裁剪）
+
+enum BangumiP1Fixtures {
+    static let subjectComments = #"""
+    {"data":[
+      {"id":54768866,"user":{"id":686848,"username":"yuridanshi","nickname":"ローゲリウス","avatar":{"small":"https://lain.bangumi.lat/r/100/pic/user/l/000/68/68/686848.jpg","medium":"https://lain.bangumi.lat/r/200/pic/user/l/000/68/68/686848.jpg","large":"https://lain.bangumi.lat/pic/user/l/000/68/68/686848.jpg"},"group":10,"sign":"","joinedAt":1650677995,"isFriend":false},"type":2,"rate":6,"comment":"没懂这个好看的地方在哪里？","updatedAt":1793300491},
+      {"id":54768867,"user":{"id":1,"username":"silent","nickname":"沉默","avatar":null},"type":2,"rate":9,"comment":"","updatedAt":1793300492}
+    ],"total":9183}
+    """#
+
+    static let episodeComments = #"""
+    [
+      {"id":1171862,"mainID":1128641,"creatorID":695549,"relatedID":0,"createdAt":1664904592,"content":"上推看到翻译[img]https://img.example.com/a.jpg[/img]","state":0,"reactions":[],
+       "replies":[
+         {"id":1174526,"mainID":1128641,"creatorID":695549,"relatedID":1171862,"createdAt":1665242912,"content":"太可爱了","state":0,"user":{"id":695549,"username":"695549","nickname":"Earendil_C","avatar":{"small":"https://lain.bgm.tv/r/100/a.jpg","medium":"https://lain.bgm.tv/r/200/a.jpg","large":"https://lain.bgm.tv/a.jpg"},"group":10,"sign":"","joinedAt":1,"isFriend":false}},
+         {"id":1174527,"mainID":1128641,"creatorID":2,"relatedID":1171862,"createdAt":1665242913,"content":"内容已被用户删除","state":6,"user":{"id":2,"username":"gone","nickname":"gone","avatar":null,"group":10,"sign":"","joinedAt":1,"isFriend":false}}
+       ],
+       "user":{"id":695549,"username":"695549","nickname":"Earendil_C","avatar":{"small":"https://lain.bgm.tv/r/100/a.jpg","medium":"https://lain.bgm.tv/r/200/a.jpg","large":"https://lain.bgm.tv/a.jpg"},"group":10,"sign":"","joinedAt":1,"isFriend":false}},
+      {"id":1171863,"mainID":1128641,"creatorID":3,"relatedID":0,"createdAt":1664904593,"content":"内容已被用户删除","state":6,"reactions":[],"replies":[],"user":{"id":3,"username":"x","nickname":"x","avatar":null,"group":10,"sign":"","joinedAt":1,"isFriend":false}}
+    ]
+    """#
+
+    static let reviews = #"""
+    {"data":[
+      {"id":341937,"user":{"id":446750,"username":"446750","nickname":"南","avatar":{"small":"https://lain.bangumi.lat/r/100/u.jpg","medium":"https://lain.bangumi.lat/r/200/u.jpg","large":"https://lain.bangumi.lat/u.jpg"},"group":10,"sign":"","joinedAt":1543312509,"isFriend":false},
+       "entry":{"id":381825,"type":1,"uid":446750,"title":"女权战士也想让吉田恵里香滚蛋","icon":"https://lain.bangumi.lat/pic/photo/g/no_photo.png","summary":"作为一个自诩平权战士……","replies":3,"createdAt":1793000000,"updatedAt":1793000000,"public":true}}
+    ],"total":12}
+    """#
+
+    /// 官方网页短评的最小结构，给回落路径用。
+    static let commentsPageHTML = #"""
+    <html><body><div id="comment_box">
+      <div class="item clearit" data-item-user="7">
+        <a class="avatar"><span style="background-image:url('//lain.bgm.tv/pic/user/l/a.jpg')"></span></a>
+        <div class="text"><a class="l">Alice</a><small class="grey">@ 看过</small>
+          <small class="grey">@ 2024-4-9 22:20</small><p class="comment">好看</p></div>
+      </div>
+    </div></body></html>
+    """#
 }

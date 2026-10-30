@@ -3,14 +3,15 @@ import Foundation
 /// Bangumi 服务站点。默认官方 `bgm.tv`；国内直连经常被挡，可以切到镜像（如 `bangumi.lat`）。
 ///
 /// 一个站点由三个派生地址组成，镜像站按镜像站的规则推导：
-/// - API：`api.<host>`（官方是 `api.bgm.tv`，`next.bgm.tv` 只在官方上使用）
+/// - API：`api.<host>`（官方是 `api.bgm.tv`）；`next.<host>` 的 /p1 接口（热门、短评、
+///   长评、单集吐槽）镜像站同样代理，实测 next.bangumi.lat 与 next.bgm.tv 返回一致
 /// - 图床：`lain.<host>`（官方是 `lain.bgm.tv`）
 /// - 网页 / OAuth 授权页：`<host>`（官方是 `bgm.tv`）
 public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
     /// 用来展示与去重的稳定标识，就是 host。
     public let host: String
     public let name: String
-    /// 官方站点：额外的 next.bgm.tv 热门接口可用。
+    /// 官方站点：OAuth 授权与换 token 只能在这里完成（见 `authorizeURL` / `tokenURL`）。
     public let isOfficial: Bool
 
     public var id: String { host }
@@ -28,27 +29,31 @@ public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
     public static var presets: [BangumiSite] { [official, mirrorLat] }
 
     public var apiDomain: URL { URL(string: "https://api.\(host)")! }
-    public var nextDomain: URL? { isOfficial ? URL(string: "https://next.bgm.tv") : nil }
+    /// /p1 接口。镜像站也代理它（2026-10 实测 next.bangumi.lat 的热门、短评、长评、
+    /// 单集吐槽与官方逐字节一致），所以不再只给官方。
+    public var nextDomain: URL { URL(string: "https://next.\(host)")! }
     public var webDomain: URL { URL(string: "https://\(host)")! }
     public var imageDomain: URL { URL(string: "https://lain.\(host)")! }
 
     /// 授权页固定走官方 bgm.tv。
     ///
-    /// 镜像站（bangumi.lat）的网页前面有 Anubis 反机器人验证，授权链路经过它后
-    /// 回调参数容易变形 / 授权码超过 60 秒有效期，实测换 token 会 400。
-    /// OAuth 只在登录时用一次，固定官方最稳；镜像只承担日常 API 与图床。
+    /// 2026-10 实测：镜像站整个网页层（含 /oauth/authorize）都在 Anubis 的 JavaScript
+    /// 工作量证明之后，浏览器能自动通过，但换 token 的端点镜像根本没有代理（见 `tokenURL`），
+    /// 所以授权页走镜像也完成不了登录。登录是一次性动作，固定官方；登录后的
+    /// `/v0/me`、收藏、进度全部跟随站点走 `api.<host>`，镜像用户之后不再需要翻墙。
     public var authorizeURL: URL { URL(string: "https://bgm.tv/oauth/authorize")! }
 
     /// 换 token 的地址，固定走官方。
     ///
-    /// 实测镜像站只代理 `/v0/`：`api.bangumi.lat/oauth/access_token` 返回 400；
-    /// 网页镜像的 token 端点又被 Anubis 挡住。OAuth token 端点是 App 自己发的一次
-    /// 普通 HTTPS 请求，不需要用户直连，所以固定用官方地址即可。
+    /// 2026-10 实测：`api.bangumi.lat/oauth/access_token` 返回的是 HTML 错误页（不是
+    /// OAuth 的 JSON `invalid_request`），`bangumi.lat/oauth/access_token` 被 Anubis 挡住；
+    /// App 自己发的 POST 过不了工作量证明，所以这一步只能用官方地址。
     public var tokenURL: URL { URL(string: "https://bgm.tv/oauth/access_token")! }
 
-    /// 短评 / 长评 / 角色 / 制作人员等网页 HTML 的地址。
+    /// 网页 HTML 的地址，只作 /p1 接口不可用时的回落。
     ///
-    /// `api.bangumi.lat` 只代理 JSON API，网页内容要走网页镜像；官方则用 bgm.tv。
+    /// 短评 / 长评 / 单集吐槽现在走 `nextDomain` 的 JSON 接口，镜像站可直达；
+    /// 镜像的网页层在 Anubis 之后、App 抓不到，所以回落固定抓官方。
     public var webPageBase: URL { URL(string: "https://bgm.tv")! }
 
     /// 把任意合法 host 规范化成站点（用户手动添加镜像时用）。

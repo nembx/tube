@@ -18,19 +18,20 @@ struct BangumiSiteSettingsTests {
         #expect(site.apiDomain.absoluteString == "https://api.bgm.tv")
         #expect(site.webDomain.absoluteString == "https://bgm.tv")
         #expect(site.imageDomain.absoluteString == "https://lain.bgm.tv")
-        #expect(site.nextDomain?.absoluteString == "https://next.bgm.tv")
+        #expect(site.nextDomain.absoluteString == "https://next.bgm.tv")
         #expect(site.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
         #expect(site.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
     }
 
-    @Test("mirror site derives api/lain subdomains and has no next endpoint")
+    @Test("mirror site derives api/lain/next subdomains")
     func mirrorDomains() {
         let site = BangumiSite.mirrorLat
         #expect(site.apiDomain.absoluteString == "https://api.bangumi.lat")
         #expect(site.webDomain.absoluteString == "https://bangumi.lat")
         #expect(site.imageDomain.absoluteString == "https://lain.bangumi.lat")
-        #expect(site.nextDomain == nil)
-        // 授权页与换 token 固定官方：镜像网页有 Anubis 挑战，走镜像会 400。
+        // 镜像也代理 /p1：短评 / 长评 / 单集吐槽 / 热门不再只有官方可用。
+        #expect(site.nextDomain.absoluteString == "https://next.bangumi.lat")
+        // 授权页与换 token 固定官方：镜像的 token 端点没有代理，网页层在 Anubis 之后。
         #expect(site.authorizeURL.absoluteString == "https://bgm.tv/oauth/authorize")
         #expect(site.tokenURL.absoluteString == "https://bgm.tv/oauth/access_token")
     }
