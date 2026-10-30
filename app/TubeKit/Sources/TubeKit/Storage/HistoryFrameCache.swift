@@ -34,6 +34,20 @@ enum HistoryFrameCache {
         return String(format: "frame-%016llx", digest)
     }
 
+    /// 历史里存的是落盘当时的**绝对**路径。iOS 重装 / 更新后数据容器的 UUID 会变，
+    /// 旧路径指向的文件就不在了 —— 这正是「继续观看」封面一直空白、且和镜像 / 官方
+    /// 站点无关的原因（file:// 根本不走网络）。文件名只由番剧身份决定、跨容器稳定，
+    /// 所以按文件名在**当前**目录里重新找；找不到返回 nil，让调用方回落到海报。
+    static func currentURL(forStored coverURLString: String?) -> URL? {
+        guard let coverURLString, let stored = URL(string: coverURLString), stored.isFileURL else {
+            return nil
+        }
+        let name = stored.lastPathComponent
+        guard name.hasPrefix("frame-") else { return nil }
+        let candidate = directoryURL.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+    }
+
     private static func writeJPEG(image: CGImage, to url: URL) throws {
         let type = UTType.jpeg.identifier as CFString
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, type, 1, nil) else {

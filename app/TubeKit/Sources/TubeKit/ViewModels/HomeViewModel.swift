@@ -95,6 +95,9 @@ public final class HomeViewModel {
     private var sectionGeneration: [String: Int] = [:]
     /// 正在取色的 subject，避免重复下载。
     private var paletteTasks: Set<Int> = []
+    /// 「继续观看」本地帧丢了时找回来的番剧海报，按历史 detailURL 记。
+    public private(set) var historyCovers: [String: URL] = [:]
+    private var historyCoverTasks: Set<String> = []
 
     public init(
         api: BangumiAPIClientProtocol,
@@ -107,6 +110,45 @@ public final class HomeViewModel {
         // 首帧即可用：骨架 + Banner 磁盘缓存 + 上次算好的色板，避免空黑屏等 .task
         bannerPalettes = paletteStore.load()
         ensureSectionsReady()
+    }
+
+    // MARK: - 继续观看封面回落
+
+    /// 本地帧封面已经找回的海报；没有就 nil。
+    public func historyCoverURL(for entry: WatchHistoryEntry) -> URL? {
+        historyCovers[entry.detailURLString]
+    }
+
+    /// 本地帧丢了（iOS 重装 / 更新后数据容器路径变了）时，用 bangumi 海报顶上。
+    /// 按条目号直接取；老历史没存号就按标题搜一次。结果按 detailURL 记住，不重复请求。
+    public func resolveHistoryCoverIfNeeded(for entry: WatchHistoryEntry) {
+        let key = entry.detailURLString
+        guard historyCovers[key] == nil, !historyCoverTasks.contains(key) else { return }
+        let subjectID = entry.subjectID
+        let title = entry.bangumiTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        historyCoverTasks.insert(key)
+        Task { [weak self] in
+            guard let self else { return }
+            let url = await self.fetchHistoryCover(subjectID: subjectID, title: title)
+            self.historyCoverTasks.remove(key)
+            if let url {
+                self.historyCovers[key] = url
+            }
+        }
+    }
+
+    private func fetchHistoryCover(subjectID: Int?, title: String) async -> URL? {
+        var id = subjectID ?? 0
+        if id <= 0, !title.isEmpty {
+            let results = try? await api.search(
+                keyword: title, sort: .match, filter: .default, limit: 5, offset: 0
+            )
+            id = results?.first {
+                $0.id > 0 && ($0.displayName == title || $0.name == title || $0.nameCn == title)
+            }?.id ?? 0
+        }
+        guard id > 0, let subject = try? await api.fetchSubject(subjectID: id) else { return nil }
+        return HomeHeroBannerLayout.coverURL(for: subject)
     }
 
     /// 保证 `sections` 骨架已就位，并灌入 Banner 磁盘缓存（不发网络请求）。

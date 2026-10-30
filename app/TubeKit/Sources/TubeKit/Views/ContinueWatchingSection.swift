@@ -27,17 +27,25 @@ public struct ContinueWatchingSection: View {
     let subtitle: String?
     var onTapEntry: (WatchHistoryEntry) -> Void
     var onRemoveEntry: (WatchHistoryEntry) -> Void
+    /// 本地帧封面丢了时用的番剧海报；没有就显示占位。
+    var fallbackCoverURL: (WatchHistoryEntry) -> URL?
+    /// 卡片发现本地帧丢了，请上层去把海报找回来。
+    var onNeedsFallbackCover: (WatchHistoryEntry) -> Void
 
     public init(
         entries: [WatchHistoryEntry],
         subtitle: String? = nil,
         onTapEntry: @escaping (WatchHistoryEntry) -> Void,
-        onRemoveEntry: @escaping (WatchHistoryEntry) -> Void
+        onRemoveEntry: @escaping (WatchHistoryEntry) -> Void,
+        fallbackCoverURL: @escaping (WatchHistoryEntry) -> URL? = { _ in nil },
+        onNeedsFallbackCover: @escaping (WatchHistoryEntry) -> Void = { _ in }
     ) {
         self.entries = entries
         self.subtitle = subtitle
         self.onTapEntry = onTapEntry
         self.onRemoveEntry = onRemoveEntry
+        self.fallbackCoverURL = fallbackCoverURL
+        self.onNeedsFallbackCover = onNeedsFallbackCover
     }
 
     public var body: some View {
@@ -64,7 +72,11 @@ public struct ContinueWatchingSection: View {
                         Button {
                             onTapEntry(entry)
                         } label: {
-                            ContinueWatchingCard(entry: entry)
+                            ContinueWatchingCard(
+                                entry: entry,
+                                fallbackCoverURL: fallbackCoverURL(entry),
+                                onNeedsFallbackCover: { onNeedsFallbackCover(entry) }
+                            )
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
@@ -92,6 +104,8 @@ public struct ContinueWatchingSection: View {
 /// 继续观看横卡：16:9 封面（优先当前帧截图）+ 标题 + 集数/进度。
 struct ContinueWatchingCard: View {
     let entry: WatchHistoryEntry
+    var fallbackCoverURL: URL? = nil
+    var onNeedsFallbackCover: () -> Void = {}
 
     @State private var isHovering: Bool = false
 
@@ -122,11 +136,17 @@ struct ContinueWatchingCard: View {
         .offset(y: isHovering ? -BangumiCardLayout.hoverLift : 0)
         .onHover { isHovering = $0 }
         .animation(.spring(response: 0.32, dampingFraction: 0.78), value: isHovering)
+        .task(id: entry.coverURLString) {
+            // 本地帧按当前容器找不到（重装 / 更新后路径变了）→ 去拿番剧海报。
+            if HistoryStore.resolvedCoverURL(for: entry.coverURLString) == nil {
+                onNeedsFallbackCover()
+            }
+        }
     }
 
     @ViewBuilder
     private var cover: some View {
-        let url = URL(string: entry.coverURLString ?? "")
+        let url = HistoryStore.resolvedCoverURL(for: entry.coverURLString) ?? fallbackCoverURL
         let shape = RoundedRectangle(
             cornerRadius: ContinueWatchingLayout.coverCornerRadius,
             style: .continuous

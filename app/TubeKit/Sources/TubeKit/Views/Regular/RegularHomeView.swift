@@ -97,7 +97,9 @@ public struct RegularHomeView: View {
                     entries: history.continueWatching,
                     subtitle: "CONTINUE WATCHING",
                     onTapEntry: onTapHistoryEntry,
-                    onRemoveEntry: onRemoveHistoryEntry
+                    onRemoveEntry: onRemoveHistoryEntry,
+                    fallbackCoverURL: { model.historyCoverURL(for: $0) },
+                    onNeedsFallbackCover: { model.resolveHistoryCoverIfNeeded(for: $0) }
                 )
                 .padding(.horizontal, RegularHomeHeroLayout.horizontalPadding)
                 .padding(.top, 24)

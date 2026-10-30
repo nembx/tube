@@ -88,7 +88,9 @@ public struct HomeView: View {
                         ContinueWatchingSection(
                             entries: history.continueWatching,
                             onTapEntry: onTapHistoryEntry,
-                            onRemoveEntry: onRemoveHistoryEntry
+                            onRemoveEntry: onRemoveHistoryEntry,
+                            fallbackCoverURL: { model.historyCoverURL(for: $0) },
+                            onNeedsFallbackCover: { model.resolveHistoryCoverIfNeeded(for: $0) }
                         )
                         .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
                         .listRowSeparator(.hidden)

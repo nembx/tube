@@ -75,8 +75,11 @@ public final class HistoryStore {
             existing.lastEpisodeIndex = episode.index
             existing.lastEpisodeTitle = episode.title
             existing.ruleName = request.anime.ruleName
-            // 已有当前帧封面时不要被番剧海报盖掉。
-            if !Self.isLocalFrameCover(existing.coverURLString) {
+            // 已有当前帧封面时不要被番剧海报盖掉 —— 但帧文件已经不在了
+            //（iOS 重装 / 更新后容器路径变了）就该让海报顶上，否则这行永远空白。
+            let keepsLiveFrame = Self.isLocalFrameCover(existing.coverURLString)
+                && HistoryFrameCache.currentURL(forStored: existing.coverURLString) != nil
+            if !keepsLiveFrame {
                 existing.coverURLString = resolvedCoverURL?.absoluteString ?? existing.coverURLString
             }
             existing.lastPositionMs = 0
@@ -225,6 +228,16 @@ public final class HistoryStore {
     nonisolated public static func isLocalFrameCover(_ coverURLString: String?) -> Bool {
         guard let coverURLString, let url = URL(string: coverURLString) else { return false }
         return url.isFileURL
+    }
+
+    /// 给视图用的封面地址：本地帧按**当前**容器重新定位（旧容器的绝对路径已失效）；
+    /// 帧真不在了返回 nil，让调用方回落到番剧海报。远端地址原样放行。
+    nonisolated public static func resolvedCoverURL(for coverURLString: String?) -> URL? {
+        guard let coverURLString, !coverURLString.isEmpty else { return nil }
+        if isLocalFrameCover(coverURLString) {
+            return HistoryFrameCache.currentURL(forStored: coverURLString)
+        }
+        return URL(string: coverURLString)
     }
 
     private func fetchCandidates(title: String, detailURL: String) throws -> [WatchHistoryEntry] {
