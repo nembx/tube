@@ -27,4 +27,13 @@ struct CompactTabTests {
         #expect(!CompactTab.follow.prefersDarkChrome)
         #expect(!CompactTab.settings.prefersDarkChrome)
     }
+
+    /// 一级入口以宽屏的四个为准存着；窄屏没有搜索入口，宽屏的搜索落到首页那颗 dock 上。
+    @Test("dock entries round-trip through the wide-screen sections, search lands on home")
+    func dockEntriesMapOntoSections() {
+        for tab in CompactTab.allCases {
+            #expect(CompactTab(section: tab.section) == tab)
+        }
+        #expect(CompactTab(section: .search) == .home)
+    }
 }

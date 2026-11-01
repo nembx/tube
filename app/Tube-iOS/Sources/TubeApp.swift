@@ -9,7 +9,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
-        MainActor.assumeIsolated { PlayerOrientationLock.shared.supportedInterfaceOrientations }
+        MainActor.assumeIsolated { PlayerOrientationLock.shared.supportedInterfaceOrientations(for: window) }
     }
 }
 

@@ -26,6 +26,7 @@ public struct PlayerView: View {
     @Environment(\.playerSystemPlaybackController) private var systemPlayback
     @Environment(\.playerInteractionController) private var interaction
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.playerCursorController) private var cursor
     @Environment(\.dismiss) private var dismiss
 
@@ -248,6 +249,17 @@ public struct PlayerView: View {
         PlayerPhoneChromePolicy.usesPhoneLandscapeChrome(
             mode: layoutMode,
             isPhone: presentation.supportsOrientationToggle
+        )
+    }
+
+    /// 宽屏摆法里的「全屏 / 退出全屏」键只对手机姿态有意义（Max 机型横屏会走宽屏摆法，
+    /// 这颗键负责把它翻回竖屏）。iPhone Duo 展开后内屏是 regular × regular，按平板管 ——
+    /// 翻屏键既翻不动也不该露出来。
+    private var showsOrientationToggleInWideLayout: Bool {
+        PlayerOrientationPolicy.isHandheldPhone(
+            isPhoneIdiom: presentation.supportsOrientationToggle,
+            horizontalIsRegular: horizontalSizeClass == .regular,
+            verticalIsRegular: verticalSizeClass == .regular
         )
     }
 
@@ -1027,7 +1039,7 @@ public struct PlayerView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layoutPriority(0)
 
-                    if isPhone {
+                    if showsOrientationToggleInWideLayout {
                         orientationToggleButton
                             .layoutPriority(1)
                     }

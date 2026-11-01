@@ -194,22 +194,53 @@ public final class TubeSession {
 /// 宽屏沉浸式外壳，但所有 view model 共享同一个 session。
 struct TubeRootContent: View {
     let session: TubeSession
+    /// 两个壳共用的导航栈 / 一级入口 / 视图模型 / 播放状态。放在壳之上：
+    /// iPhone Duo 开合、iPad 分屏变窄都会换壳，状态不能跟着壳一起没。
+    @State private var shell: ShellState
 
     #if os(iOS)
         @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
 
+    init(session: TubeSession) {
+        self.session = session
+        self._shell = State(initialValue: ShellState(session: session))
+    }
+
+    /// 现在该用窄屏壳还是宽屏壳。
+    private var usesCompactShell: Bool {
+        #if os(iOS)
+            return sizeClass == .compact
+        #else
+            return false
+        #endif
+    }
+
     var body: some View {
         Group {
-            #if os(iOS)
-                if sizeClass == .compact {
-                    CompactRootView(session: session)
-                } else {
-                    RegularShellView(session: session)
-                }
-            #else
-                RegularShellView(session: session)
-            #endif
+            if usesCompactShell {
+                CompactRootView(session: session, state: shell)
+            } else {
+                RegularShellView(session: session, state: shell)
+            }
+        }
+        // 换壳时把「搜索页」在两种壳里的两种说法互相翻译，用户留在原地。
+        // 关掉动画：这一步只是改说法，不是用户在导航。
+        .onChange(of: usesCompactShell, initial: true) { _, compact in
+            let next = compact
+                ? ShellHandoff.enteringCompact(path: shell.path, pages: shell.pages)
+                : ShellHandoff.enteringRegular(path: shell.path, pages: shell.pages)
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                if next.pages != shell.pages { shell.pages = next.pages }
+                if next.path != shell.path { shell.path = next.path }
+            }
+        }
+        // iOS 先 empty session 出 UI，再换 persistent：视图模型不随 session 重建，
+        // 必须把历史绑到新 store，否则搜索历史只写内存，且旧 container 释放后会闪退。
+        .onChange(of: ObjectIdentifier(session.searchHistory)) { _, _ in
+            shell.searchModel.bindHistory(session.searchHistory)
         }
         .task(id: ObjectIdentifier(session.store)) {
             guard session.shouldBootstrapAtLaunch else { return }
@@ -281,31 +312,50 @@ enum CompactTab: Hashable, CaseIterable {
         case .follow, .settings: return false
         }
     }
+
+    /// 与宽屏一级入口互相翻译。窄屏没有搜索入口 —— 搜索落在首页导航栈里，
+    /// 所以宽屏的「搜索」在 dock 上对应首页。
+    init(section: RegularShellTab) {
+        switch section {
+        case .home, .search: self = .home
+        case .follow: self = .follow
+        case .settings: self = .settings
+        }
+    }
+
+    var section: RegularShellTab {
+        switch self {
+        case .home: return .home
+        case .follow: return .follow
+        case .settings: return .settings
+        }
+    }
 }
 
 struct CompactRootView: View {
     let session: TubeSession
+    /// 导航栈、一级入口、视图模型、播放状态都在这里 —— 由 `TubeRootContent` 持有，
+    /// 换壳（iPhone Duo 开合、iPad 分屏变窄）时不丢。
+    @Bindable var state: ShellState
     @Environment(\.playerPresentationController) private var presentation
     @Environment(\.colorScheme) private var systemScheme
-    /// 用具体的 `[Route]` 而不是 `NavigationPath` —— dock 的明暗要读栈顶是哪一页。
-    @State private var path: [Route] = []
-    @State private var selectedTab: CompactTab = .home
-    @State private var searchModel: SearchViewModel
-    @State private var homeModel: HomeViewModel
-    @State private var activePlayerRequest: PlaybackRequest?
-    @State private var activeSourceCache: SourceSearchCache?
     @State private var playerTransitionVisible: Bool = false
 
-    init(session: TubeSession) {
+    init(session: TubeSession, state: ShellState) {
         self.session = session
-        self._searchModel = State(
-            initialValue: SearchViewModel(
-                api: session.bangumiAPI,
-                history: session.searchHistory
-            )
-        )
-        self._homeModel = State(
-            initialValue: HomeViewModel(api: session.bangumiAPI)
+        self.state = state
+    }
+
+    /// dock 当前选中项。一级入口按宽屏的四个存着，窄屏把搜索折进首页栈，
+    /// 见 `CompactTab.init(section:)`。
+    private var selectedTab: CompactTab {
+        CompactTab(section: state.pages.current)
+    }
+
+    private var tabSelection: Binding<CompactTab> {
+        Binding(
+            get: { selectedTab },
+            set: { state.pages.select($0.section) }
         )
     }
 
@@ -316,10 +366,10 @@ struct CompactRootView: View {
                 .scaleEffect(playerTransitionVisible ? 0.985 : 1)
                 .opacity(playerTransitionVisible ? 0.92 : 1)
                 .blur(radius: playerTransitionVisible ? 4 : 0)
-                .disabled(activePlayerRequest != nil)
+                .disabled(state.activePlayerRequest != nil)
                 .animation(.easeInOut(duration: 0.22), value: playerTransitionVisible)
 
-            if let activePlayerRequest {
+            if let activePlayerRequest = state.activePlayerRequest {
                 ZStack {
                     Color.black
                         .ignoresSafeArea()
@@ -332,7 +382,7 @@ struct CompactRootView: View {
                             progressTracker: session.collections
                         ),
                         history: session.history,
-                        sourceCache: activeSourceCache,
+                        sourceCache: state.activeSourceCache,
                         onClose: dismissPlayer
                     )
                     .opacity(playerTransitionVisible ? 1 : 0)
@@ -343,11 +393,10 @@ struct CompactRootView: View {
                 .zIndex(10)
             }
         }
-        .animation(.spring(response: 0.34, dampingFraction: 0.92), value: activePlayerRequest != nil)
-        // iOS 先 empty session 出 UI，再换 persistent：@State searchModel 不会随 session 重建，
-        // 必须把 history 绑到新 store，否则搜索历史只写内存，且旧 container 释放后会闪退。
-        .onChange(of: ObjectIdentifier(session.searchHistory)) { _, _ in
-            searchModel.bindHistory(session.searchHistory)
+        .animation(.spring(response: 0.34, dampingFraction: 0.92), value: state.activePlayerRequest != nil)
+        // 从宽屏壳折回来时播放器可能已经在场：过渡态直接就位，别让它藏在透明层底下。
+        .onAppear {
+            playerTransitionVisible = state.activePlayerRequest != nil
         }
     }
 
@@ -360,14 +409,16 @@ struct CompactRootView: View {
     private var dockScheme: ColorScheme {
         // 设置页有自己的导航栈，共享的 path 跟它无关。
         guard selectedTab != .settings else { return systemScheme }
-        let dark = path.last?.prefersDarkChrome ?? selectedTab.prefersDarkChrome
+        let dark = state.path.last?.prefersDarkChrome ?? selectedTab.prefersDarkChrome
         return dark ? .dark : systemScheme
     }
 
+    /// 向下滚动时 dock 收成只剩当前入口的一颗圆钮，向上滚回来再展开，
+    /// 见 `dockMinimizesOnScroll`。
     @ViewBuilder
     private var compactTabView: some View {
         if #available(iOS 18.0, macOS 15.0, *) {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 Tab(value: .home) {
                     homeStack
                 } label: {
@@ -386,8 +437,9 @@ struct CompactRootView: View {
                     dockLabel(.settings)
                 }
             }
+            .dockMinimizesOnScroll()
         } else {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 homeStack
                     .tabItem { dockLabel(.home) }
                     .tag(CompactTab.home)
@@ -400,6 +452,7 @@ struct CompactRootView: View {
                     .tabItem { dockLabel(.settings) }
                     .tag(CompactTab.settings)
             }
+            .dockMinimizesOnScroll()
         }
     }
 
@@ -413,24 +466,24 @@ struct CompactRootView: View {
     }
 
     private var homeStack: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: $state.path) {
             HomeView(
-                model: homeModel,
+                model: state.homeModel,
                 history: session.history,
                 onTapItem: { item in
-                    path.append(Route.detail(item))
+                    state.path.append(Route.detail(item))
                 },
                 onTapSection: { section in
-                    path.append(Route.tagSection(tag: section.tag))
+                    state.path.append(Route.tagSection(tag: section.tag))
                 },
                 onTapHistoryEntry: { entry in
-                    path.append(Route.historyDetail(historyHint(from: entry)))
+                    state.path.append(Route.historyDetail(historyHint(from: entry)))
                 },
                 onRemoveHistoryEntry: { entry in
                     try? session.history.delete(entry)
                 },
                 onTapSearch: {
-                    path.append(Route.search)
+                    state.path.append(Route.search)
                 }
             )
             .navigationDestination(for: Route.self) { route in
@@ -441,9 +494,9 @@ struct CompactRootView: View {
     }
 
     private var followStack: some View {
-        NavigationStack(path: $path) {
+        NavigationStack(path: $state.path) {
             FollowView(followStore: session.followStore) { item in
-                path.append(Route.detail(item))
+                state.path.append(Route.detail(item))
             }
             .navigationDestination(for: Route.self) { route in
                 routeView(route)
@@ -464,30 +517,30 @@ struct CompactRootView: View {
         switch route {
         case .home:
             HomeView(
-                model: homeModel,
+                model: state.homeModel,
                 history: session.history,
-                onTapItem: { item in path.append(Route.detail(item)) },
-                onTapSection: { section in path.append(Route.tagSection(tag: section.tag)) },
+                onTapItem: { item in state.path.append(Route.detail(item)) },
+                onTapSection: { section in state.path.append(Route.tagSection(tag: section.tag)) },
                 onTapHistoryEntry: { entry in
-                    path.append(Route.historyDetail(historyHint(from: entry)))
+                    state.path.append(Route.historyDetail(historyHint(from: entry)))
                 },
                 onRemoveHistoryEntry: { entry in
                     try? session.history.delete(entry)
                 },
-                onTapSearch: { path.append(Route.search) }
+                onTapSearch: { state.path.append(Route.search) }
             )
         case .search:
             SearchView(
-                model: searchModel,
-                browseModel: homeModel,
-                onTapItem: { item in path.append(Route.detail(item)) },
-                onTapSection: { section in path.append(Route.tagSection(tag: section.tag)) }
+                model: state.searchModel,
+                browseModel: state.homeModel,
+                onTapItem: { item in state.path.append(Route.detail(item)) },
+                onTapSection: { section in state.path.append(Route.tagSection(tag: section.tag)) }
             )
         case .tagSection(let tag):
             TagSectionView(
                 api: session.bangumiAPI,
                 tag: tag,
-                onTapItem: { item in path.append(Route.detail(item)) }
+                onTapItem: { item in state.path.append(Route.detail(item)) }
             )
         case .detail(let item):
             let historyEntry = try? session.history.entry(forBangumiItem: item)
@@ -499,12 +552,12 @@ struct CompactRootView: View {
                     historyHint: historyEntry.map(historyHint(from:))
                 )
             ) { request, cache in
-                activeSourceCache = cache
+                state.activeSourceCache = cache
                 presentPlayer(request)
             } onTapTag: { tag in
-                searchModel.applyTag(tag)
-                Task { await searchModel.submit() }
-                path.append(Route.search)
+                state.searchModel.applyTag(tag)
+                Task { await state.searchModel.submit() }
+                state.path.append(Route.search)
             }
         case .historyDetail(let hint):
             DetailView(
@@ -515,12 +568,12 @@ struct CompactRootView: View {
                     historyHint: hint
                 )
             ) { request, cache in
-                activeSourceCache = cache
+                state.activeSourceCache = cache
                 presentPlayer(request)
             } onTapTag: { tag in
-                searchModel.applyTag(tag)
-                Task { await searchModel.submit() }
-                path.append(Route.search)
+                state.searchModel.applyTag(tag)
+                Task { await state.searchModel.submit() }
+                state.path.append(Route.search)
             }
         case .episodes(let detail):
             if let rule = session.store.installedRules.first(where: { $0.name == detail.ruleName })?.rule {
@@ -529,11 +582,12 @@ struct CompactRootView: View {
                 }
             }
         case .player(let req):
+            // 宽屏壳把播放器放在 path 里；折到窄屏后改成整屏覆盖层呈现。
             Color.clear
                 .task {
-                    guard activePlayerRequest == nil else { return }
-                    if !path.isEmpty {
-                        path.removeLast()
+                    guard state.activePlayerRequest == nil else { return }
+                    if !state.path.isEmpty {
+                        state.path.removeLast()
                     }
                     presentPlayer(req)
                 }
@@ -543,7 +597,7 @@ struct CompactRootView: View {
             SettingsView()
         case .follow:
             FollowView(followStore: session.followStore) { item in
-                path.append(Route.detail(item))
+                state.path.append(Route.detail(item))
             }
         }
     }
@@ -562,9 +616,9 @@ struct CompactRootView: View {
     }
 
     private func presentPlayer(_ request: PlaybackRequest) {
-        guard activePlayerRequest == nil else { return }
+        guard state.activePlayerRequest == nil else { return }
 
-        activePlayerRequest = request
+        state.activePlayerRequest = request
         withAnimation(.spring(response: 0.34, dampingFraction: 0.92)) {
             playerTransitionVisible = true
         }
@@ -577,8 +631,26 @@ struct CompactRootView: View {
 
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(200))
-            activePlayerRequest = nil
-            activeSourceCache = nil
+            state.activePlayerRequest = nil
+            state.activeSourceCache = nil
         }
+    }
+}
+
+extension View {
+    /// 向下滚动时把底部 dock 收成「只剩当前入口的一颗圆钮」，向上滚回来再展开 ——
+    /// 与 Apple Music 在 iOS 26 上的收合一致。系统实现从 iOS 26 起才有，
+    /// 更老的系统保持常驻胶囊；macOS 没有这套 dock。
+    @ViewBuilder
+    func dockMinimizesOnScroll() -> some View {
+        #if os(iOS)
+            if #available(iOS 26.0, *) {
+                tabBarMinimizeBehavior(.onScrollDown)
+            } else {
+                self
+            }
+        #else
+            self
+        #endif
     }
 }

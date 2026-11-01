@@ -64,10 +64,22 @@ public struct SearchView: View {
             }
             .scrollIndicators(.never)
             .scrollToTop()
+            // 浏览分区流的首屏预热跟「有没有搜索上下文」走，不能挂在分区行自己身上 ——
+            // 行是懒建的，挂上去就等于谁先滚到谁才触发。
+            .task(id: showsBrowse) {
+                guard showsBrowse else { return }
+                await browseModel.loadInitialIfNeeded()
+            }
         }
         .environment(\.colorScheme, .dark)
         .navigationTitle("")
         .toolbarBackground(.hidden, for: .automatic)
+    }
+
+    /// 没有任何搜索上下文：页面底部接的是与首页一致的浏览分区流。
+    /// 与 `content` 的分支顺序一致 —— 搜索中 / 出错 / 无结果都不算。
+    private var showsBrowse: Bool {
+        model.results.isEmpty && !model.isSearching && model.lastError == nil && !model.hasSearched
     }
 
     private func submit() {
@@ -154,30 +166,33 @@ public struct SearchView: View {
     }
 
     /// 未发起搜索：最近搜索 → 常用标签 → 与首页一致的分区浏览。
+    ///
+    /// 这几段必须平铺成外层 `LazyVStack` 的直接子项，不能再包一层 `VStack`：
+    /// 普通 VStack 在懒栈里只算**一个**单元，push 进来那一帧会把 16 个分区行、
+    /// 几百张海报卡（每张还挂着长按预览）一次铺完，紧接着 16 路 `.task` 同时发请求、
+    /// 同时回写 `sections` 让整棵树重算 —— 点搜索先卡一下就是这么来的。
+    /// 平铺之后行只在滚到眼前时才建，分区也只加载视口里的那几个，和首页一致。
     @ViewBuilder
     private var idle: some View {
-        VStack(alignment: .leading, spacing: metrics.sectionSpacing) {
-            SearchHistorySection(model: model, limit: Self.historyLimit) { keyword in
-                isInputFocused = false
-                Task { await model.applyHistory(keyword) }
-            }
-            SearchTagCloudSection(model: model, title: "热门标签")
+        SearchHistorySection(model: model, limit: Self.historyLimit) { keyword in
+            isInputFocused = false
+            Task { await model.applyHistory(keyword) }
+        }
+        SearchTagCloudSection(model: model, title: "热门标签")
 
-            ForEach(browseModel.sections) { content in
-                BangumiSectionRow(
-                    content: content,
-                    cardWidth: metrics.cardWidth,
-                    onTapItem: onTapItem,
-                    onTapSeeAll: { onTapSection(content.section) },
-                    onRetry: {
-                        Task { await browseModel.retrySection(content.id) }
-                    }
-                )
-                .task(id: content.id) {
-                    await browseModel.loadSectionIfNeeded(content.id)
+        ForEach(browseModel.sections) { content in
+            BangumiSectionRow(
+                content: content,
+                cardWidth: metrics.cardWidth,
+                onTapItem: onTapItem,
+                onTapSeeAll: { onTapSection(content.section) },
+                onRetry: {
+                    Task { await browseModel.retrySection(content.id) }
                 }
+            )
+            .task(id: content.id) {
+                await browseModel.loadSectionIfNeeded(content.id)
             }
         }
-        .task { await browseModel.loadInitialIfNeeded() }
     }
 }

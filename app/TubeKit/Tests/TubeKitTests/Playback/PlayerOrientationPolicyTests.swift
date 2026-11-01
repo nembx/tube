@@ -55,4 +55,35 @@ struct PlayerOrientationPolicyTests {
         #expect(PlayerOrientationPolicy.allowed(isPhone: false, isPlaybackPresented: false) == .any)
         #expect(PlayerOrientationPolicy.allowed(isPhone: false, isPlaybackPresented: true) == .any)
     }
+
+    /// iPhone Duo 合着是手机，展开后内屏 regular × regular 当平板；
+    /// Max 机型横屏（regular 宽 × compact 高）仍然是手机，iPad 从来不是。
+    @Test("a folded Duo is handheld, an unfolded one is tablet-like")
+    func duoPostureFollowsBothSizeClasses() {
+        #expect(
+            PlayerOrientationPolicy.isHandheldPhone(
+                isPhoneIdiom: true, horizontalIsRegular: false, verticalIsRegular: true
+            )
+        )
+        #expect(
+            !PlayerOrientationPolicy.isHandheldPhone(
+                isPhoneIdiom: true, horizontalIsRegular: true, verticalIsRegular: true
+            )
+        )
+        #expect(
+            PlayerOrientationPolicy.isHandheldPhone(
+                isPhoneIdiom: true, horizontalIsRegular: true, verticalIsRegular: false
+            )
+        )
+        #expect(
+            !PlayerOrientationPolicy.isHandheldPhone(
+                isPhoneIdiom: false, horizontalIsRegular: true, verticalIsRegular: true
+            )
+        )
+        #expect(
+            !PlayerOrientationPolicy.isHandheldPhone(
+                isPhoneIdiom: false, horizontalIsRegular: false, verticalIsRegular: true
+            )
+        )
+    }
 }

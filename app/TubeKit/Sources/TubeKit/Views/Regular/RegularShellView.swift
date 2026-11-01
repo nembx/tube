@@ -7,27 +7,18 @@ import SwiftUI
 /// 二级页（详情 / 分区 / 搜索结果）仍然走 `NavigationStack`，返回交给系统。
 struct RegularShellView: View {
     let session: TubeSession
+    /// 导航栈、一级入口、视图模型、播放状态都在这里 —— 由 `TubeRootContent` 持有，
+    /// 换壳（iPhone Duo 开合、iPad 分屏变窄）时不丢。
+    @Bindable var state: ShellState
     @Environment(\.playerPresentationController) private var presentation
     @Environment(\.openWindow) private var openWindow
-    @State private var pages = RegularShellPages()
-    @State private var path: [Route] = []
-    @State private var searchModel: SearchViewModel
-    @State private var homeModel: HomeViewModel
     /// 播放器进入沉浸模式时把顶栏也收起来。
     @State private var chromeHidden: Bool = false
     @Environment(\.regularTopBarPlacement) private var topBarPlacement
 
-    init(session: TubeSession) {
+    init(session: TubeSession, state: ShellState) {
         self.session = session
-        self._searchModel = State(
-            initialValue: SearchViewModel(
-                api: session.bangumiAPI,
-                history: session.searchHistory
-            )
-        )
-        self._homeModel = State(
-            initialValue: HomeViewModel(api: session.bangumiAPI)
-        )
+        self.state = state
     }
 
     var body: some View {
@@ -38,22 +29,20 @@ struct RegularShellView: View {
                 shell
             }
         }
-        // 与 CompactRootView 相同：session 从 empty 升级到 persistent 时重绑搜索历史 store。
-        .onChange(of: ObjectIdentifier(session.searchHistory)) { _, _ in
-            searchModel.bindHistory(session.searchHistory)
-        }
     }
 
     private var activePlayerRequest: PlaybackRequest? {
         // macOS 独立窗口模式下，永远不让主窗口走“替换整个 UI”的播放器路径。
         if presentation.prefersDedicatedWindow { return nil }
-        guard case .player(let request) = path.last else { return nil }
+        // 窄屏壳正放着的覆盖层播放器，展开屏幕后在这里直接接住。
+        if let request = state.activePlayerRequest { return request }
+        guard case .player(let request) = state.path.last else { return nil }
         return request
     }
 
     /// 顶栏只在一级页出现；push 进二级页之后交给系统返回按钮，避免两套返回打架。
     private var showsTopBar: Bool {
-        path.isEmpty && !chromeHidden
+        state.path.isEmpty && !chromeHidden
     }
 
     @ViewBuilder
@@ -62,7 +51,7 @@ struct RegularShellView: View {
             RegularShellLayout.cinemaBackground
                 .ignoresSafeArea()
 
-            NavigationStack(path: $path) {
+            NavigationStack(path: $state.path) {
                 rootContent
                     .navigationDestination(for: Route.self) { route in
                         navigationDestination(for: route)
@@ -71,11 +60,11 @@ struct RegularShellView: View {
 
             Group {
                 if showsTopBar {
-                    RegularTopBar(selected: pages.current) { selected in
+                    RegularTopBar(selected: state.pages.current) { selected in
                         // 不给切页上过渡动画：两棵重页面同时在场插值一遍，
                         // 切换就卡在那 0.22 秒里。
-                        path.removeAll()
-                        pages.select(selected)
+                        state.path.removeAll()
+                        state.pages.select(selected)
                     }
                     .transition(.opacity)
                 }
@@ -100,9 +89,14 @@ struct RegularShellView: View {
                 progressTracker: session.collections
             ),
             history: session.history,
+            sourceCache: state.activeSourceCache,
             onClose: {
-                guard !path.isEmpty else { return }
-                path.removeLast()
+                if state.activePlayerRequest != nil {
+                    state.activePlayerRequest = nil
+                    state.activeSourceCache = nil
+                } else if !state.path.isEmpty {
+                    state.path.removeLast()
+                }
             }
         )
     }
@@ -114,13 +108,13 @@ struct RegularShellView: View {
     private var rootContent: some View {
         ZStack {
             ForEach(RegularShellTab.allCases) { entry in
-                if pages.visited.contains(entry) {
+                if state.pages.visited.contains(entry) {
                     page(entry)
-                        .opacity(pages.isActive(entry) ? 1 : 0)
-                        .allowsHitTesting(pages.isActive(entry))
-                        .accessibilityHidden(!pages.isActive(entry))
-                        .zIndex(pages.isActive(entry) ? 1 : 0)
-                        .environment(\.regularShellPageIsActive, pages.isActive(entry))
+                        .opacity(state.pages.isActive(entry) ? 1 : 0)
+                        .allowsHitTesting(state.pages.isActive(entry))
+                        .accessibilityHidden(!state.pages.isActive(entry))
+                        .zIndex(state.pages.isActive(entry) ? 1 : 0)
+                        .environment(\.regularShellPageIsActive, state.pages.isActive(entry))
                 }
             }
         }
@@ -133,15 +127,15 @@ struct RegularShellView: View {
             homeView
         case .follow:
             RegularFollowView(followStore: session.followStore) { item in
-                path.append(Route.detail(item))
+                state.path.append(Route.detail(item))
             }
         case .search:
             underTopBar {
                 RegularSearchView(
-                    model: searchModel,
-                    browseModel: homeModel,
-                    onTapItem: { item in path.append(Route.detail(item)) },
-                    onTapSection: { section in path.append(Route.tagSection(tag: section.tag)) }
+                    model: state.searchModel,
+                    browseModel: state.homeModel,
+                    onTapItem: { item in state.path.append(Route.detail(item)) },
+                    onTapSection: { section in state.path.append(Route.tagSection(tag: section.tag)) }
                 )
             }
         case .settings:
@@ -149,18 +143,18 @@ struct RegularShellView: View {
                 SettingsView()
             }
             // 换代 = 把设置页连同它压上去的二级页一起拆掉，见 `RegularShellPages`。
-            .id(pages.settingsGeneration)
+            .id(state.pages.settingsGeneration)
         }
     }
 
     private var homeView: some View {
         RegularHomeView(
-            model: homeModel,
+            model: state.homeModel,
             history: session.history,
-            onTapItem: { item in path.append(Route.detail(item)) },
-            onTapSection: { section in path.append(Route.tagSection(tag: section.tag)) },
+            onTapItem: { item in state.path.append(Route.detail(item)) },
+            onTapSection: { section in state.path.append(Route.tagSection(tag: section.tag)) },
             onTapHistoryEntry: { entry in
-                path.append(Route.historyDetail(historyHint(from: entry)))
+                state.path.append(Route.historyDetail(historyHint(from: entry)))
             },
             onRemoveHistoryEntry: { entry in
                 try? session.history.delete(entry)
@@ -198,16 +192,16 @@ struct RegularShellView: View {
             homeView
         case .search:
             RegularSearchView(
-                model: searchModel,
-                browseModel: homeModel,
-                onTapItem: { item in path.append(Route.detail(item)) },
-                onTapSection: { section in path.append(Route.tagSection(tag: section.tag)) }
+                model: state.searchModel,
+                browseModel: state.homeModel,
+                onTapItem: { item in state.path.append(Route.detail(item)) },
+                onTapSection: { section in state.path.append(Route.tagSection(tag: section.tag)) }
             )
         case .tagSection(let tag):
             TagSectionView(
                 api: session.bangumiAPI,
                 tag: tag,
-                onTapItem: { item in path.append(Route.detail(item)) }
+                onTapItem: { item in state.path.append(Route.detail(item)) }
             )
         case .detail(let item):
             let historyEntry = try? session.history.entry(forBangumiItem: item)
@@ -221,9 +215,9 @@ struct RegularShellView: View {
             ) { request, _ in
                 launchPlayer(request)
             } onTapTag: { tag in
-                searchModel.applyTag(tag)
-                Task { await searchModel.submit() }
-                path.append(Route.search)
+                state.searchModel.applyTag(tag)
+                Task { await state.searchModel.submit() }
+                state.path.append(Route.search)
             }
         case .historyDetail(let hint):
             RegularDetailView(
@@ -236,9 +230,9 @@ struct RegularShellView: View {
             ) { request, _ in
                 launchPlayer(request)
             } onTapTag: { tag in
-                searchModel.applyTag(tag)
-                Task { await searchModel.submit() }
-                path.append(Route.search)
+                state.searchModel.applyTag(tag)
+                Task { await state.searchModel.submit() }
+                state.path.append(Route.search)
             }
         case .episodes(let detail):
             if let rule = session.store.installedRules.first(where: { $0.name == detail.ruleName })?.rule {
@@ -254,8 +248,8 @@ struct RegularShellView: View {
                         openWindow(id: "player", value: req)
                         // 延迟一帧清理，避免导航状态竞争
                         try? await Task.sleep(for: .milliseconds(50))
-                        if case .player = path.last {
-                            path.removeLast()
+                        if case .player = state.path.last {
+                            state.path.removeLast()
                         }
                     }
             } else {
@@ -292,7 +286,7 @@ struct RegularShellView: View {
         if presentation.prefersDedicatedWindow {
             openWindow(id: "player", value: request)
         } else {
-            path.append(Route.player(request))
+            state.path.append(Route.player(request))
         }
     }
 }

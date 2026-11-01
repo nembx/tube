@@ -30,9 +30,13 @@ final class PlayerOrientationLock {
     private init() {}
 
     /// 供 `UIApplicationDelegate` 回答系统的朝向询问。
-    var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+    ///
+    /// 按**那扇窗口**现在的 size class 判断是不是手机姿态：iPhone Duo 合着是手机，
+    /// 展开后内屏上报 regular × regular，要按 iPad 的规矩不锁朝向 ——
+    /// Apple 也明说内屏不理会 App 声明的 interface orientation。
+    func supportedInterfaceOrientations(for window: UIWindow?) -> UIInterfaceOrientationMask {
         switch PlayerOrientationPolicy.allowed(
-            isPhone: UIDevice.current.userInterfaceIdiom == .phone,
+            isPhone: Self.isHandheldPhone(window: window),
             isPlaybackPresented: isPlaybackPresented,
             prefersLandscape: prefersLandscape
         ) {
@@ -40,6 +44,19 @@ final class PlayerOrientationLock {
         case .landscapeOnly: .landscape
         case .any: .all
         }
+    }
+
+    /// 这块屏现在算不算「常态只有竖屏的手机」。拿不到 trait 时按设备类型兜底。
+    static func isHandheldPhone(window: UIWindow?) -> Bool {
+        let isPhoneIdiom = UIDevice.current.userInterfaceIdiom == .phone
+        guard let traits = (window ?? activeWindowScene()?.keyWindow)?.traitCollection else {
+            return isPhoneIdiom
+        }
+        return PlayerOrientationPolicy.isHandheldPhone(
+            isPhoneIdiom: isPhoneIdiom,
+            horizontalIsRegular: traits.horizontalSizeClass == .regular,
+            verticalIsRegular: traits.verticalSizeClass == .regular
+        )
     }
 
     /// 进播放页。默认竖屏 —— 翻不翻屏由用户按键决定。
@@ -63,9 +80,12 @@ final class PlayerOrientationLock {
         else { return }
         isPlaybackPresented = playbackPresented
         self.prefersLandscape = prefersLandscape
-        let orientations: UIInterfaceOrientationMask = prefersLandscape ? .landscape : .portrait
 
         guard let scene = Self.activeWindowScene() else { return }
+        // iPhone Duo 展开后内屏是平板姿态：状态照记（合上后系统装饰的收放还靠它），
+        // 但不去改朝向 —— 内屏本来就不理会这套声明，硬请求只会让系统白忙一场。
+        guard Self.isHandheldPhone(window: scene.keyWindow) else { return }
+        let orientations: UIInterfaceOrientationMask = prefersLandscape ? .landscape : .portrait
         // 顺序要紧：先让系统重新问一遍允许哪些朝向，再请求几何变更。
         // 反过来的话请求的朝向还不在允许集合里，会被直接驳回。
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()

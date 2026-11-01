@@ -35,4 +35,18 @@ public enum PlayerOrientationPolicy {
         guard isPlaybackPresented else { return .portraitOnly }
         return prefersLandscape ? .landscapeOnly : .portraitOnly
     }
+
+    /// 这块屏现在算不算「常态只有竖屏的手机」—— 也就是 `allowed(isPhone:)` 的 `isPhone`。
+    ///
+    /// 光看设备类型不够：iPhone Duo 是 phone idiom，合着时外屏 compact，按手机管；
+    /// 展开后内屏上报 regular × regular，Apple 明说内屏不理会 App 声明的 interface
+    /// orientation，要按 iPad 的规矩不锁朝向。Max 机型横屏是 regular 宽 × compact 高，
+    /// 仍然是手机。只有两个维度都 regular 才算平板姿态。
+    public static func isHandheldPhone(
+        isPhoneIdiom: Bool,
+        horizontalIsRegular: Bool,
+        verticalIsRegular: Bool
+    ) -> Bool {
+        isPhoneIdiom && !(horizontalIsRegular && verticalIsRegular)
+    }
 }
