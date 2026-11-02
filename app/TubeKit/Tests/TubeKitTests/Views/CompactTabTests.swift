@@ -36,4 +36,23 @@ struct CompactTabTests {
         }
         #expect(CompactTab(section: .search) == .home)
     }
+
+    /// 三条栈共用一条 path：切入口前不清栈，追番栈会顶着首页 push 的详情页出场，
+    /// 看着像点了没反应，得再点一下才见到列表。
+    @Test("switching to another entry clears the shared path")
+    func switchingEntryClearsPath() {
+        #expect(CompactTab.switchingClearsPath(from: .home, to: .follow))
+        #expect(CompactTab.switchingClearsPath(from: .follow, to: .settings))
+        #expect(CompactTab.switchingClearsPath(from: .settings, to: .home))
+        #expect(CompactTab.switchingClearsPath(from: .search, to: .follow))
+    }
+
+    /// 同一入口重选交给系统弹回根；换壳时 TabView 回写当前选中项也不能把栈清掉，
+    /// 宽屏的搜索在 dock 上就是首页，不算切页。
+    @Test("reselecting the current entry keeps the path")
+    func reselectingKeepsPath() {
+        #expect(CompactTab.switchingClearsPath(from: .follow, to: .follow) == false)
+        #expect(CompactTab.switchingClearsPath(from: .home, to: .home) == false)
+        #expect(CompactTab.switchingClearsPath(from: .search, to: .home) == false)
+    }
 }

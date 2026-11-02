@@ -54,12 +54,18 @@ public final class AVPlayerBackend: VideoPlayerBackend {
     /// 当前处在哪一段。装载和跳转会把它打回起播态。
     private var bufferingStage = PlayerBufferingStageMachine()
 
+    /// 系统音频会话的开关：起播时激活、收起时交还。时机为什么这么定见
+    /// `SystemPlaybackAudioSession`。
+    private let audioSession: any PlaybackAudioSessionControlling
+
     public init(
         player: AVPlayer = AVPlayer(),
-        bufferingPolicy: PlayerBufferingPolicy = .default
+        bufferingPolicy: PlayerBufferingPolicy = .default,
+        audioSession: any PlaybackAudioSessionControlling = SystemPlaybackAudioSession.shared
     ) {
         self.player = player
         self.bufferingPolicy = bufferingPolicy
+        self.audioSession = audioSession
         // 缓冲不足时宁可等也不要硬播出 stall。
         player.automaticallyWaitsToMinimizeStalling = true
         installTimeObserver()
@@ -88,6 +94,8 @@ public final class AVPlayerBackend: VideoPlayerBackend {
         speedTimer?.invalidate()
         speedTimer = nil
         unload()
+        // 播放器彻底收起，把音频会话交还：被我们打断的那首歌会收到通知自己续播。
+        audioSession.deactivate()
     }
 
     /// periodic observer 现在只负责刷新 `currentTime` / `duration` ——
@@ -293,6 +301,9 @@ public final class AVPlayerBackend: VideoPlayerBackend {
     }
 
     public func play() {
+        // 到这里才真正抢音频焦点。更早激活（比如启动时）会在用户还没点播放的时候
+        // 就把别的 App 正放着的歌掐掉。
+        audioSession.activate()
         player.play()
     }
 
@@ -320,6 +331,10 @@ public final class AVPlayerBackend: VideoPlayerBackend {
     }
 
     public func setRate(_ rate: Float) {
+        // 非零 rate 等于起播，同样得先拿到音频会话。
+        if rate > 0 {
+            audioSession.activate()
+        }
         player.rate = rate
     }
 

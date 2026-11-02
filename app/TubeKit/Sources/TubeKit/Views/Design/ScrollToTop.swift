@@ -12,11 +12,82 @@ public enum ScrollToTopLayout {
     public static let threshold: CGFloat = 400
 
     /// 圆钮直径 —— 整圆都是命中区，不小于系统 44pt 最小触控目标。
+    /// 与 iOS 26 dock 收合后那颗圆钮同尺寸，两颗并排时才像一对。
     public static let buttonDiameter: CGFloat = 48
+
+    /// 镜像 dock 圆钮时的落点（iPhone 17 / iOS 26 模拟器实测）：收合后的圆钮直径 48，
+    /// 圆心离屏幕侧边 52pt、离内容安全区底边往下 31pt。按钮按这两个数镜像到另一侧。
+    public static let dockCircleCenterEdgeInset: CGFloat = 52
+    public static let dockCircleCenterBelowSafeArea: CGFloat = 31
+
+    /// 不镜像 dock 时按钮离角落的留白。
+    public static let cornerHorizontalPadding: CGFloat = 20
+    public static let cornerVerticalPadding: CGFloat = 24
 
     /// 给定偏移量下要不要露出按钮。
     public static func shouldShow(offset: CGFloat, threshold: CGFloat = threshold) -> Bool {
         offset > threshold
+    }
+}
+
+/// 按钮什么时候露面。
+public enum ScrollToTopReveal: Sendable {
+    /// 滚过阈值就一直挂着。
+    case pastThreshold
+    /// 滚过阈值、**且正在往下滚**才露面，手指往回一走就收起来。
+    ///
+    /// 主页要的是这个：iOS 26 的 dock 向下滚收成一颗圆钮、向上滚再展开，
+    /// 按钮跟着这个节奏走 —— dock 缩起来时它才冒头，dock 展开时让位。
+    /// 老系统的 dock 不收合，就只按滚动方向走。
+    case whileScrollingDown
+}
+
+/// 露不露面的状态机。
+///
+/// 方向这层判断抽出来是为了能单测：`ViewModifier` 里的 `@State` 进不了测试。
+public struct ScrollToTopVisibility: Equatable, Sendable {
+    /// 翻方向要攒够的位移（pt）。List 的回弹、行高变化带来的零碎位移不该翻方向。
+    static let directionSlop: CGFloat = 6
+
+    private let threshold: CGFloat
+    private let reveal: ScrollToTopReveal
+    /// 当前方向上走过的最远点，用来算位移够不够翻方向。
+    private var anchorOffset: CGFloat = 0
+
+    public private(set) var isVisible: Bool = false
+
+    public init(reveal: ScrollToTopReveal, threshold: CGFloat = ScrollToTopLayout.threshold) {
+        self.reveal = reveal
+        self.threshold = threshold
+    }
+
+    /// 每帧滚动都喂进来；视图只读 `isVisible`。
+    public mutating func update(offset: CGFloat) {
+        guard offset > threshold else {
+            // 回到阈值以内（含橡皮筋拉过头的负值）一律收起。锚点跟着走，
+            // 免得再往下滚时先要补掉上一次拉过头的位移才露面。
+            isVisible = false
+            anchorOffset = offset
+            return
+        }
+
+        guard reveal == .whileScrollingDown else {
+            isVisible = ScrollToTopLayout.shouldShow(offset: offset, threshold: threshold)
+            anchorOffset = offset
+            return
+        }
+
+        let delta = offset - anchorOffset
+        if delta >= Self.directionSlop {
+            isVisible = true
+            anchorOffset = offset
+        } else if delta <= -Self.directionSlop {
+            isVisible = false
+            anchorOffset = offset
+        } else {
+            // 没攒够容差：顺方向的小步位移推着锚点走，反向的先攒着。
+            anchorOffset = isVisible ? max(anchorOffset, offset) : min(anchorOffset, offset)
+        }
     }
 }
 
@@ -57,9 +128,10 @@ extension View {
     /// 内容最顶端必须有一个 `ScrollToTopAnchor()`，否则按钮永远不出现。
     public func scrollToTop(
         threshold: CGFloat = ScrollToTopLayout.threshold,
-        alignment: Alignment = .bottomTrailing
+        alignment: Alignment = .bottomTrailing,
+        reveal: ScrollToTopReveal = .pastThreshold
     ) -> some View {
-        modifier(ScrollToTopModifier(threshold: threshold, alignment: alignment))
+        modifier(ScrollToTopModifier(threshold: threshold, alignment: alignment, reveal: reveal))
     }
 }
 
@@ -67,12 +139,20 @@ extension View {
 private struct ScrollToTopModifier: ViewModifier {
     let threshold: CGFloat
     let alignment: Alignment
+    let reveal: ScrollToTopReveal
 
-    @State private var offset: CGFloat = 0
+    @State private var visibility: ScrollToTopVisibility
 
-    private var isVisible: Bool {
-        ScrollToTopLayout.shouldShow(offset: offset, threshold: threshold)
+    init(threshold: CGFloat, alignment: Alignment, reveal: ScrollToTopReveal) {
+        self.threshold = threshold
+        self.alignment = alignment
+        self.reveal = reveal
+        _visibility = State(
+            initialValue: ScrollToTopVisibility(reveal: reveal, threshold: threshold)
+        )
     }
+
+    private var isVisible: Bool { visibility.isVisible }
 
     func body(content: Content) -> some View {
         ScrollViewReader { proxy in
@@ -84,8 +164,7 @@ private struct ScrollToTopModifier: ViewModifier {
                                 proxy.scrollTo(scrollToTopAnchorID, anchor: .top)
                             }
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 24)
+                        .modifier(ScrollToTopPlacement(reveal: reveal))
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
                 }
@@ -101,12 +180,45 @@ private struct ScrollToTopModifier: ViewModifier {
             content.onScrollGeometryChange(for: CGFloat.self) { geometry in
                 geometry.contentOffset.y + geometry.contentInsets.top
             } action: { _, newValue in
-                offset = newValue
+                visibility.update(offset: newValue)
             }
         } else {
             content.onPreferenceChange(ScrollToTopOffsetKey.self) { newValue in
-                offset = newValue
+                visibility.update(offset: newValue)
             }
+        }
+    }
+}
+
+/// 按钮落在角上的哪个位置。
+///
+/// 跟着 dock 收合走的那种（`.whileScrollingDown`）在 iOS 26 上要和收合后的圆钮
+/// 同一行：圆钮在左下，按钮镜像到右下 —— 圆心等高、离边等距、直径一样，
+/// 一左一右像一对。按钮因此探出内容安全区、压进 dock 那一行；收合后那一行右侧
+/// 是空的，系统 dock 也不拦这里的点击。老系统 dock 不收合，按钮照旧浮在角落。
+private struct ScrollToTopPlacement: ViewModifier {
+    let reveal: ScrollToTopReveal
+
+    private var mirrorsDock: Bool {
+        #if os(iOS)
+            if #available(iOS 26.0, *) { return reveal == .whileScrollingDown }
+        #endif
+        return false
+    }
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if mirrorsDock {
+            // 用 padding + offset 而不是 alignmentGuide：按钮外面还套着 `if` 和
+            // transition，guide 传不到 overlay 的对齐层，实测会被忽略。
+            let radius = ScrollToTopLayout.buttonDiameter / 2
+            content
+                .padding(.horizontal, ScrollToTopLayout.dockCircleCenterEdgeInset - radius)
+                .offset(y: ScrollToTopLayout.dockCircleCenterBelowSafeArea + radius)
+        } else {
+            content
+                .padding(.horizontal, ScrollToTopLayout.cornerHorizontalPadding)
+                .padding(.vertical, ScrollToTopLayout.cornerVerticalPadding)
         }
     }
 }

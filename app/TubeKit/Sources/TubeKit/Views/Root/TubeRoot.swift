@@ -330,6 +330,16 @@ enum CompactTab: Hashable, CaseIterable {
         case .settings: return .settings
         }
     }
+
+    /// 切到这个入口之前，要不要清空共享的导航栈。
+    ///
+    /// 窄屏三个入口是三条 `NavigationStack`，但绑的是同一条 `ShellState.path`
+    /// —— 换壳（Duo 开合、iPad 分屏）要交接栈，只能共用一条。切入口前不清栈的话，
+    /// 新入口的栈会顶着旧入口 push 上去的页出场，看着像点了没反应；再点一下触发
+    /// 系统的「回到根」才见到列表。同一入口重选不清：那一下本该由系统弹回根。
+    static func switchingClearsPath(from current: RegularShellTab, to tab: CompactTab) -> Bool {
+        CompactTab(section: current) != tab
+    }
 }
 
 struct CompactRootView: View {
@@ -355,7 +365,13 @@ struct CompactRootView: View {
     private var tabSelection: Binding<CompactTab> {
         Binding(
             get: { selectedTab },
-            set: { state.pages.select($0.section) }
+            set: { tab in
+                // 与宽屏顶栏一个道理，见 `CompactTab.switchingClearsPath`。
+                if CompactTab.switchingClearsPath(from: state.pages.current, to: tab) {
+                    state.path.removeAll()
+                }
+                state.pages.select(tab.section)
+            }
         )
     }
 

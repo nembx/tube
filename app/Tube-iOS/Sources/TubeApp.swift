@@ -2,7 +2,6 @@ import TubeKit
 import AVKit
 import SwiftUI
 import UIKit
-import AVFoundation
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
@@ -27,8 +26,9 @@ struct TubeApp: App {
                 .statusBarHidden(orientation.isImmersivePlayback)
                 .persistentSystemOverlays(orientation.isImmersivePlayback ? .hidden : .automatic)
                 .task {
-                    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
-                    try? AVAudioSession.sharedInstance().setActive(true)
+                    // 只设类别，不激活。`.playback` 是独占类别，启动就 setActive(true)
+                    // 会把用户正放着的歌掐掉；激活推迟到真正起播（AVPlayerBackend.play）。
+                    SystemPlaybackAudioSession.shared.configure()
                 }
                 .environment(
                     \.playerPresentationController,

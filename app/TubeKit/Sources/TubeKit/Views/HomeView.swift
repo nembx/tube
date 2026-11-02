@@ -119,7 +119,9 @@ public struct HomeView: View {
                 .scrollContentBackground(.hidden)
                 .scrollIndicators(.hidden)
                 .contentMargins(.top, 0, for: .scrollContent)
-                .scrollToTop()
+                // 跟着 dock 的收合节奏走：往下滚 dock 缩成圆钮时按钮才冒头，
+                // 往上滚 dock 展开时让位。
+                .scrollToTop(reveal: .whileScrollingDown)
             }
         }
         .environment(\.colorScheme, .dark)
