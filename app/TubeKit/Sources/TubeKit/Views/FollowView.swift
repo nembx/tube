@@ -155,6 +155,13 @@ public struct FollowView: View {
     @Environment(BangumiCollectionStore.self) private var collections
     /// 登录后按 bgm 状态筛选；nil 是全部。
     @State private var selectedType: BangumiCollectionType? = nil
+    /// 宫格密度（3 列 / 2 列）。存 UserDefaults，选过就记住。
+    @AppStorage(FollowGridSettings.densityKey) private var gridDensityRaw: String =
+        FollowGridSettings.densityDefault.rawValue
+
+    private var gridDensity: FollowGridDensity {
+        FollowGridDensity(rawValue: gridDensityRaw) ?? FollowGridSettings.densityDefault
+    }
 
     public init(followStore: FollowStore, onTapItem: @escaping (BangumiItem) -> Void) {
         self.followStore = followStore
@@ -181,6 +188,24 @@ public struct FollowView: View {
         }
         .navigationTitle("")
         .toolbarBackground(.hidden, for: .automatic)
+        // 宫格密度开关：压在头图上，和首页右上角的搜索键同一套摆法。
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if !followStore.items.isEmpty {
+                    Button(action: toggleGridDensity) {
+                        Image(systemName: gridDensity.systemImage)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .accessibilityLabel("切换为\(gridDensity.toggled.label)宫格")
+                }
+            }
+        }
+    }
+
+    private func toggleGridDensity() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            gridDensityRaw = gridDensity.toggled.rawValue
+        }
     }
 
     @ViewBuilder
@@ -257,7 +282,8 @@ public struct FollowView: View {
                 BangumiGrid(
                     items: visibleItems,
                     onTapItem: onTapItem,
-                    onLoadMore: { _ in }
+                    onLoadMore: { _ in },
+                    compactColumnCount: gridDensity.columnCount
                 ) {
                     EmptyView()
                 }

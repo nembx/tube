@@ -1,22 +1,45 @@
 import SwiftUI
 
-/// 「继续观看」横向卡布局：宽 > 高，宽高比 16:9（横屏帧 / 截图友好）。
+/// 「继续观看」横向卡布局：卡片就是一张 16:9 封面，标题与进度压在图上。
 enum ContinueWatchingLayout {
     static let cardWidth: CGFloat = 228
     /// width / height = 16:9。
     static let coverAspectRatio: CGFloat = 16.0 / 9.0
     static let cardSpacing: CGFloat = 12
     static let coverCornerRadius: CGFloat = 12
-    static let titleHeight: CGFloat = 40
-    static let metaHeight: CGFloat = 18
-    static let spacing: CGFloat = 6
+    /// 封面底部渐变从底沿往上铺这么大一块，白字压在上面才立得住。
+    static let overlayHeightRatio: CGFloat = 0.85
+    /// 压图文字的四周内边距。
+    static let overlayPadding: CGFloat = 10
+    /// 标题与副信息之间的行距。
+    static let overlaySpacing: CGFloat = 3
 
     static var coverHeight: CGFloat {
         cardWidth / coverAspectRatio
     }
 
+    /// 卡片高度就是封面 —— 标题与进度压在图上，不再单独占一条。
     static var cardHeight: CGFloat {
-        coverHeight + spacing + titleHeight + 2 + metaHeight
+        coverHeight
+    }
+
+    /// 副信息行：「第 3 集 · 看到 12:34」。没看过（0ms）只报集数。
+    static func metaText(episodeIndex: Int, positionMs: Int) -> String {
+        let episode = "第 \(episodeIndex + 1) 集"
+        guard positionMs > 0 else { return episode }
+        return "\(episode) · 看到 \(positionText(ms: positionMs))"
+    }
+
+    /// 进度时间：不足一小时「12:34」，超过一小时「1:02:42」。
+    static func positionText(ms: Int) -> String {
+        let totalSeconds = max(0, ms / 1000)
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds / 60) % 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
 
@@ -101,7 +124,8 @@ public struct ContinueWatchingSection: View {
     }
 }
 
-/// 继续观看横卡：16:9 封面（优先当前帧截图）+ 标题 + 集数/进度。
+/// 继续观看横卡：一张 16:9 封面（优先当前帧截图），标题与「第 N 集 · 看到 mm:ss」
+/// 压在底部渐变上 —— 卡片就是一张图，白字直接落在画面上。
 struct ContinueWatchingCard: View {
     let entry: WatchHistoryEntry
     var fallbackCoverURL: URL? = nil
@@ -110,43 +134,40 @@ struct ContinueWatchingCard: View {
     @State private var isHovering: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: ContinueWatchingLayout.spacing) {
-            cover
-            Text(entry.bangumiTitle)
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .frame(
-                    width: ContinueWatchingLayout.cardWidth,
-                    height: ContinueWatchingLayout.titleHeight,
-                    alignment: .topLeading
-                )
-            Text(metaText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(
-                    width: ContinueWatchingLayout.cardWidth,
-                    height: ContinueWatchingLayout.metaHeight,
-                    alignment: .leading
-                )
-        }
-        .frame(width: ContinueWatchingLayout.cardWidth, alignment: .topLeading)
-        .offset(y: isHovering ? -BangumiCardLayout.hoverLift : 0)
-        .onHover { isHovering = $0 }
-        .animation(.spring(response: 0.32, dampingFraction: 0.78), value: isHovering)
-        .task(id: entry.coverURLString) {
-            // 本地帧按当前容器找不到（重装 / 更新后路径变了）→ 去拿番剧海报。
-            if HistoryStore.resolvedCoverURL(for: entry.coverURLString) == nil {
-                onNeedsFallbackCover()
+        cover
+            .offset(y: isHovering ? -BangumiCardLayout.hoverLift : 0)
+            .onHover { isHovering = $0 }
+            .animation(.spring(response: 0.32, dampingFraction: 0.78), value: isHovering)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(entry.bangumiTitle)，\(metaText)")
+            .task(id: entry.coverURLString) {
+                // 本地帧按当前容器找不到（重装 / 更新后路径变了）→ 去拿番剧海报。
+                if HistoryStore.resolvedCoverURL(for: entry.coverURLString) == nil {
+                    onNeedsFallbackCover()
+                }
+            }
+    }
+
+    private var metaText: String {
+        ContinueWatchingLayout.metaText(
+            episodeIndex: entry.lastEpisodeIndex,
+            positionMs: entry.lastPositionMs
+        )
+    }
+
+    /// 封面地址，以及它是本地帧（16:9，铺满裁切）还是海报（竖版，居中留边）。
+    private var resolvedCover: (url: URL?, letterboxed: Bool) {
+        if HistoryStore.isLocalFrameCover(entry.coverURLString) {
+            let frame = HistoryStore.resolvedCoverURL(for: entry.coverURLString)
+            if let frame {
+                return (frame, false)
             }
         }
+        return (HistoryStore.resolvedCoverURL(for: entry.coverURLString) ?? fallbackCoverURL, true)
     }
 
     @ViewBuilder
     private var cover: some View {
-        let url = HistoryStore.resolvedCoverURL(for: entry.coverURLString) ?? fallbackCoverURL
         let shape = RoundedRectangle(
             cornerRadius: ContinueWatchingLayout.coverCornerRadius,
             style: .continuous
@@ -155,14 +176,11 @@ struct ContinueWatchingCard: View {
             .frame(width: ContinueWatchingLayout.cardWidth, height: ContinueWatchingLayout.coverHeight)
             .background { Color.secondary.opacity(0.08) }
             .overlay {
-                coverImage(url: url)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                coverContent
                     .scaleEffect(isHovering ? BangumiCardLayout.hoverImageScale : 1)
                     .clipped()
             }
-            .overlay(alignment: .bottom) {
-                progressOverlay
-            }
+            .overlay(alignment: .bottom) { textOverlay }
             .clipShape(shape)
             .contentShape(shape)
             .shadow(
@@ -173,54 +191,87 @@ struct ContinueWatchingCard: View {
     }
 
     @ViewBuilder
-    private func coverImage(url: URL?) -> some View {
-        RemoteImage(url: url) {
-            ZStack {
-                Color.secondary.opacity(0.08)
-                Image(systemName: "play.rectangle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
-            }
+    private var coverContent: some View {
+        let resolved = resolvedCover
+        if resolved.letterboxed {
+            posterCover(url: resolved.url)
+        } else {
+            frameCover(url: resolved.url)
         }
+    }
+
+    /// 16:9 帧：铺满整卡。
+    @ViewBuilder
+    private func frameCover(url: URL?) -> some View {
+        RemoteImage(url: url) {
+            placeholder
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 竖版海报：按高摆中间，两侧是同一张图放大模糊的兜底 —— 直接裁成
+    /// 16:9 横条会把脸裁掉一半，这是帧丢失（重装 / 更新）后的常见样子。
+    @ViewBuilder
+    private func posterCover(url: URL?) -> some View {
+        ZStack {
+            RemoteImage(url: url) { Color.clear }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .blur(radius: 24, opaque: true)
+                .overlay(Color.black.opacity(0.35))
+            RemoteImage(url: url) { placeholder }
+                .frame(
+                    width: ContinueWatchingLayout.coverHeight * BangumiCardLayout.coverAspectRatio,
+                    height: ContinueWatchingLayout.coverHeight
+                )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
-    private var progressOverlay: some View {
-        ZStack(alignment: .bottom) {
+    private var placeholder: some View {
+        ZStack {
+            Color.secondary.opacity(0.08)
+            Image(systemName: "play.rectangle.fill")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 标题 + 「第 N 集 · 看到 mm:ss」压在封面底部；背后垫一层渐变保证可读性。
+    @ViewBuilder
+    private var textOverlay: some View {
+        VStack(alignment: .leading, spacing: ContinueWatchingLayout.overlaySpacing) {
+            Text(entry.bangumiTitle)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            HStack(spacing: 4) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 9, weight: .bold))
+                Text(metaText)
+                    .font(.caption.weight(.medium).monospacedDigit())
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white.opacity(0.82))
+        }
+        .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
+        .padding(ContinueWatchingLayout.overlayPadding)
+        .frame(width: ContinueWatchingLayout.cardWidth, alignment: .leading)
+        .background(alignment: .bottom) {
             LinearGradient(
-                colors: [.clear, .black.opacity(0.72)],
+                stops: [
+                    .init(color: .black.opacity(0), location: 0),
+                    .init(color: .black.opacity(0.28), location: 0.35),
+                    .init(color: .black.opacity(0.6), location: 0.7),
+                    .init(color: .black.opacity(0.88), location: 1),
+                ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: ContinueWatchingLayout.coverHeight * 0.42)
-
-            HStack {
-                Image(systemName: "play.fill")
-                    .font(.caption2.weight(.bold))
-                Text(positionLabel)
-                    .font(.caption2.weight(.semibold).monospacedDigit())
-                Spacer(minLength: 4)
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.bottom, 8)
+            .frame(height: ContinueWatchingLayout.coverHeight * ContinueWatchingLayout.overlayHeightRatio)
         }
         .allowsHitTesting(false)
-    }
-
-    private var metaText: String {
-        let episode = "第 \(entry.lastEpisodeIndex + 1) 集"
-        if entry.lastEpisodeTitle.isEmpty {
-            return episode
-        }
-        return "\(episode) · \(entry.lastEpisodeTitle)"
-    }
-
-    private var positionLabel: String {
-        guard entry.lastPositionMs > 0 else { return "继续" }
-        let totalSeconds = entry.lastPositionMs / 1000
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
-        return String(format: "%d:%02d", minutes, seconds)
     }
 }

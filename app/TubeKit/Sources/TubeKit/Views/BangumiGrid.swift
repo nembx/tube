@@ -19,24 +19,31 @@ enum BangumiGridLayout {
         ]
     }
 
-    /// 窄屏（iPhone）固定 3 列。自适应那套在手机上只排得下 2 列，单卡被撑到 170–190pt，
+    /// 窄屏（iPhone）默认 3 列。自适应那套在手机上只排得下 2 列，单卡被撑到 170–190pt，
     /// 比首页横向行的 130pt 卡大一圈；3 列约 108–121pt，和首页一个量级。
     /// 列间距沿用首页横向行的卡距，让两处节奏一致。
+    /// 追番页的密度开关可以把它切到 2 列（`FollowGridDensity`），其余调用方维持默认。
     static let compactColumnCount: Int = 3
     static let compactHorizontalSpacing: CGFloat = BangumiSectionLayout.cardSpacing
     static let compactVerticalSpacing: CGFloat = 16
 
     static var compactColumns: [GridItem] {
+        compactColumns(count: compactColumnCount)
+    }
+
+    /// 按指定列数给窄屏排宫格。追番页的密度开关传 2 或 3。
+    static func compactColumns(count: Int) -> [GridItem] {
         Array(
             repeating: GridItem(.flexible(), spacing: compactHorizontalSpacing, alignment: .top),
-            count: compactColumnCount
+            count: max(1, count)
         )
     }
 
-    /// 窄屏 3 列时单卡的宽度，给测试和预览估算用。
-    static func compactItemWidth(forWidth width: CGFloat) -> CGFloat {
-        let gaps = CGFloat(compactColumnCount - 1) * compactHorizontalSpacing
-        return max(0, (width - gaps) / CGFloat(compactColumnCount))
+    /// 窄屏单卡的宽度，给测试和预览估算用。
+    static func compactItemWidth(forWidth width: CGFloat, count: Int = compactColumnCount) -> CGFloat {
+        let columns = max(1, count)
+        let gaps = CGFloat(columns - 1) * compactHorizontalSpacing
+        return max(0, (width - gaps) / CGFloat(columns))
     }
 
     /// 根据容器可用宽度估算列数（测试 / 调试用；真实布局交给 `GridItem.adaptive`）。
@@ -52,12 +59,14 @@ enum BangumiGridLayout {
     }
 }
 
-/// 响应式番剧宫格。用 `GridItem.adaptive` 按首选宽度自动算列数；
+/// 响应式番剧宫格。窄屏按固定列数（默认 3，追番页可切 2）；宽屏用 `GridItem.adaptive` 按首选宽度自动算列数；
 /// footer 放在 grid 下方，避免再依赖 GeometryReader 量宽（ScrollView 里容易量错、锁死 2 列）。
 public struct BangumiGrid<Footer: View>: View {
     private let items: [BangumiItem]
     private let onTapItem: (BangumiItem) -> Void
     private let onLoadMore: (BangumiItem) async -> Void
+    /// 窄屏宫格列数。只有追番页会传 2（宫格密度开关），其余调用方维持 3 列。
+    private let compactColumnCount: Int
     private let footer: Footer
     #if os(iOS)
         @Environment(\.horizontalSizeClass) private var sizeClass
@@ -72,15 +81,34 @@ public struct BangumiGrid<Footer: View>: View {
         #endif
     }
 
+    /// 窄屏按 `BangumiGridLayout` 的默认列数（3）排。
     public init(
         items: [BangumiItem],
         onTapItem: @escaping (BangumiItem) -> Void,
         onLoadMore: @escaping (BangumiItem) async -> Void,
         @ViewBuilder footer: () -> Footer
     ) {
+        self.init(
+            items: items,
+            onTapItem: onTapItem,
+            onLoadMore: onLoadMore,
+            compactColumnCount: BangumiGridLayout.compactColumnCount,
+            footer: footer
+        )
+    }
+
+    /// - Parameter compactColumnCount: 窄屏宫格列数。只有追番页会传 2（宫格密度开关）。
+    public init(
+        items: [BangumiItem],
+        onTapItem: @escaping (BangumiItem) -> Void,
+        onLoadMore: @escaping (BangumiItem) async -> Void,
+        compactColumnCount: Int,
+        @ViewBuilder footer: () -> Footer
+    ) {
         self.items = items
         self.onTapItem = onTapItem
         self.onLoadMore = onLoadMore
+        self.compactColumnCount = compactColumnCount
         self.footer = footer()
     }
 
@@ -90,7 +118,9 @@ public struct BangumiGrid<Footer: View>: View {
             : BangumiGridLayout.verticalSpacing
         VStack(alignment: .leading, spacing: verticalSpacing) {
             LazyVGrid(
-                columns: isCompact ? BangumiGridLayout.compactColumns : BangumiGridLayout.columns,
+                columns: isCompact
+                    ? BangumiGridLayout.compactColumns(count: compactColumnCount)
+                    : BangumiGridLayout.columns,
                 alignment: .leading,
                 spacing: verticalSpacing
             ) {

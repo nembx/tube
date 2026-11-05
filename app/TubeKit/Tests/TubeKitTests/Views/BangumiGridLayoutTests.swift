@@ -77,4 +77,33 @@ struct BangumiGridLayoutTests {
         let width430 = BangumiGridLayout.compactItemWidth(forWidth: 430 - 40)
         #expect(abs(width430 - BangumiSectionLayout.cardWidth) < 12)
     }
+
+    @Test("compact columns follow the requested count and clamp to at least one")
+    func compactColumnCountOverride() {
+        #expect(BangumiGridLayout.compactColumns(count: 3).count == 3)
+        #expect(BangumiGridLayout.compactColumns(count: 2).count == 2)
+        #expect(BangumiGridLayout.compactColumns(count: 0).count == 1)
+        // 默认仍是 3 列，追番页之外的调用方不受影响
+        #expect(BangumiGridLayout.compactColumns.count == BangumiGridLayout.compactColumnCount)
+        for item in BangumiGridLayout.compactColumns(count: 2) {
+            guard case let .flexible(minimum: _, maximum: maximum) = item.size else {
+                Issue.record("expected flexible GridItems")
+                return
+            }
+            #expect(maximum == .infinity)
+        }
+    }
+
+    @Test("two-column compact cards split the width minus the gutter in half")
+    func compactTwoColumnItemWidth() {
+        let width: CGFloat = 393 - 40
+        let three = BangumiGridLayout.compactItemWidth(forWidth: width)
+        let two = BangumiGridLayout.compactItemWidth(forWidth: width, count: 2)
+        #expect(two > three)
+        #expect(two > 160 && two < 180)
+        let expected = (width - BangumiGridLayout.compactHorizontalSpacing) / 2
+        #expect(abs(two - expected) < 0.001)
+        // 列数非法时退化成 1 列，而不是除出负数 / 崩溃
+        #expect(BangumiGridLayout.compactItemWidth(forWidth: width, count: 0) == width)
+    }
 }
