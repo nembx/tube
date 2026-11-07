@@ -60,5 +60,7 @@
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 nembx. Based on Cezzu © bent2685. MIT License.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>投屏时需要在局域网内转发视频，让 AirPlay 接收设备访问当前播放内容。</string>
 </dict>
 </plist>

@@ -51,7 +51,7 @@ public struct SettingsView: View {
                     Form {
                         DanmakuSettingsContent(showsAdvancedOptions: true)
                     }
-                    .formStyle(.grouped)
+                    .tubeSettingsFormStyle()
                     .navigationTitle("弹幕设置")
                 } label: {
                     Text("弹幕设置")
@@ -90,7 +90,7 @@ public struct SettingsView: View {
                 Text(kazumiAcknowledgement)
             }
         }
-        .formStyle(.grouped)
+        .tubeSettingsFormStyle()
         .navigationTitle("设置")
     }
 

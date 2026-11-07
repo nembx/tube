@@ -66,6 +66,7 @@ public final class AVPlayerBackend: VideoPlayerBackend {
         self.player = player
         self.bufferingPolicy = bufferingPolicy
         self.audioSession = audioSession
+        player.allowsExternalPlayback = true
         // 缓冲不足时宁可等也不要硬播出 stall。
         player.automaticallyWaitsToMinimizeStalling = true
         installTimeObserver()

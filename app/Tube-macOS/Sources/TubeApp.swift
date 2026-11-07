@@ -19,6 +19,7 @@ struct TubeApp: App {
                         .environment(\.playerPresentationController, makePresentationController())
                         .environment(\.playerInteractionController, makeInteractionController())
                         .environment(\.playerCursorController, makeCursorController())
+                        .environment(\.playerSystemPlaybackController, makeSystemPlaybackController())
                         // .hiddenTitleBar 让窗口顶部那条安全区只剩交通灯和返回按钮，
                         // 顶栏要升进去跟它们同行，否则会低一行压到页面内容上。
                         .environment(\.regularTopBarPlacement, .inTitleBar)
@@ -54,6 +55,7 @@ struct TubeApp: App {
                 .environment(\.playerPresentationController, makePresentationController())
                 .environment(\.playerInteractionController, makeInteractionController())
                 .environment(\.playerCursorController, makeCursorController())
+                .environment(\.playerSystemPlaybackController, makeSystemPlaybackController())
             }
         }
         // 独立播放器窗口不接外部 URL 事件，免得回调把它当成落点新开一个。
@@ -107,5 +109,11 @@ struct TubeApp: App {
                 AnyView(PlayerKeyboardInteractionOverlay(actions: actions))
             }
         )
+    }
+
+    private func makeSystemPlaybackController() -> PlayerSystemPlaybackController {
+        PlayerSystemPlaybackController(makePlayerRoutePickerButton: { player in
+            AnyView(PlayerRoutePickerButton(player: player))
+        })
     }
 }

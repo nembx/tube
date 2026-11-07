@@ -6,7 +6,8 @@ struct PlayerRoutePickerButton: UIViewRepresentable {
         let view = AVRoutePickerView()
         view.prioritizesVideoDevices = true
         view.tintColor = .white
-        view.activeTintColor = .white
+        view.activeTintColor = .systemBlue
+        view.accessibilityLabel = "AirPlay 投屏"
         return view
     }
 

@@ -44,7 +44,7 @@ enum FollowLayout {
     /// 窄屏追番页的页面底色 —— 跟随系统明暗。
     /// 头图底部的收口渐变要收到同一个颜色上，否则接缝处会有硬边。
     static func pageBackground(_ scheme: ColorScheme) -> Color {
-        scheme == .dark ? RegularShellLayout.cinemaBackground : lightPageBackground
+        TubePageLayout.background(for: scheme)
     }
 
     /// 头图 = 最新那部的封面放大模糊，和首页 hero 是同一套做法。

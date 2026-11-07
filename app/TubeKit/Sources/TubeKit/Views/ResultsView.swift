@@ -40,8 +40,9 @@ public struct ResultsView: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(TubePageLayout.horizontalPadding)
         }
+        .tubePageStyle()
         .navigationTitle("结果：\(model.text)")
     }
 }

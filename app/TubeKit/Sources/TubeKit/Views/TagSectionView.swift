@@ -53,12 +53,13 @@ public struct TagSectionView: View {
                         }
                     }
                 }
-                .padding(20)
+                .padding(TubePageLayout.horizontalPadding)
             }
         }
         .scrollToTop()
         .task { await model.loadInitialIfNeeded() }
         .refreshable { await model.reload() }
+        .tubePageStyle()
         .navigationTitle(model.title)
     }
 }

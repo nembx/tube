@@ -17,9 +17,13 @@ final class PlayerDanmakuController {
     private var nextTopTrack: Int = 0
     private var nextBottomTrack: Int = 0
     private var lastObservedTime: Double = 0
+    private let defaults: UserDefaults
+    private var blocklistRaw: String = ""
+    private var blocklist = DanmakuBlocklist(rawValue: "")
 
-    init(provider: any DanmakuProviderProtocol = DanmakuProvider()) {
+    init(provider: any DanmakuProviderProtocol = DanmakuProvider(), defaults: UserDefaults = .standard) {
         self.provider = provider
+        self.defaults = defaults
     }
 
     func prepare(for request: PlaybackRequest, forceReload: Bool = false) async {
@@ -59,6 +63,7 @@ final class PlayerDanmakuController {
     }
 
     func update(currentTime: Double, viewportSize: CGSize, playbackRate: Float) {
+        refreshBlocklist()
         guard PlaybackSettings.enableDanmaku else {
             activeComments = []
             return
@@ -93,6 +98,15 @@ final class PlayerDanmakuController {
         }
     }
 
+    /// 设置改变时也会调用，因此暂停中已有弹幕同样会立即消失。
+    func refreshBlocklist() {
+        let raw = defaults.string(forKey: DanmakuBlocklist.storageKey) ?? ""
+        guard raw != blocklistRaw else { return }
+        blocklistRaw = raw
+        blocklist = DanmakuBlocklist(rawValue: raw)
+        activeComments.removeAll { blocklist.blocks($0.comment.text) }
+    }
+
     private func resetEmissionCursor(for currentTime: Double) {
         nextCommentIndex = comments.partitioningIndex { $0.time >= currentTime }
         nextScrollTrack = 0
@@ -110,6 +124,7 @@ final class PlayerDanmakuController {
         viewportSize: CGSize,
         trackMetrics: DanmakuTrackMetrics
     ) -> ActiveDanmakuComment? {
+        guard !blocklist.blocks(comment.text) else { return nil }
         switch comment.type {
         case 4:
             guard PlaybackSettings.showBottomDanmaku else { return nil }
@@ -217,6 +232,7 @@ struct PlayerDanmakuOverlay: View {
     /// 最近一次非零的播放速率。暂停期间弹幕的横向位置按它算，见 `DanmakuPlaybackRate`。
     @State private var stableRate: Double = DanmakuPlaybackRate.fallback
     @State private var transientErrorMessage: String?
+    @AppStorage(DanmakuBlocklist.storageKey) private var blockedKeywordsRaw: String = ""
 
     public var body: some View {
         GeometryReader { proxy in
@@ -284,6 +300,9 @@ struct PlayerDanmakuOverlay: View {
             .onChange(of: playbackRate) { _, _ in
                 syncRate()
                 syncAnchor(currentTime: currentTime)
+            }
+            .onChange(of: blockedKeywordsRaw) { _, _ in
+                controller.refreshBlocklist()
             }
         }
     }

@@ -10,7 +10,7 @@ public struct PlayerDanmakuSettingsSheet: View {
             Form {
                 DanmakuSettingsContent()
             }
-            .formStyle(.grouped)
+            .tubeSettingsFormStyle()
             .navigationTitle("弹幕设置")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

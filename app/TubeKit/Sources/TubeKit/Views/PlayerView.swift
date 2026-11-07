@@ -677,7 +677,9 @@ public struct PlayerView: View {
                     moreMenuButton(size: size, font: font)
                 } else {
                     superResolutionMenuButton(size: size, font: font)
-                    systemPlayback.routePickerButton()
+                    systemPlayback.routePickerButton(player: coordinator.backend.player)
+                        .frame(width: size, height: size)
+                        .accessibilityLabel("AirPlay 投屏")
                     iconControlButton(systemImage: "text.bubble", size: size, font: font) {
                         presentDanmakuSettings()
                     }
@@ -797,8 +799,9 @@ public struct PlayerView: View {
             }
             .accessibilityLabel("画中画")
         }
-        systemPlayback.routePickerButton()
+        systemPlayback.routePickerButton(player: coordinator.backend.player)
             .frame(width: size, height: size)
+            .accessibilityLabel("AirPlay 投屏")
     }
 
     /// 统一设置菜单：将弹幕设置、超分辨率等次要功能收纳在此。
@@ -939,6 +942,12 @@ public struct PlayerView: View {
                         systemImage: "airplayvideo"
                     )
                     .font(.footnote)
+                }
+            }
+            if coordinator.backend.isExternalPlaybackActive && !coordinator.externalPlaybackUnavailable {
+                GlassPanel {
+                    Label("正在通过 AirPlay 投屏", systemImage: "airplayvideo")
+                        .font(.footnote)
                 }
             }
             if case .failed(let message) = coordinator.phase {
@@ -1663,17 +1672,21 @@ public struct PlayerPresentationController: Sendable {
 }
 
 public struct PlayerSystemPlaybackController: @unchecked Sendable {
-    private let makeRoutePickerButtonImpl: @MainActor () -> AnyView
+    private let makeRoutePickerButtonImpl: @MainActor (AVPlayer) -> AnyView
 
     public init(
         makeRoutePickerButton: @escaping @MainActor () -> AnyView = { AnyView(EmptyView()) }
     ) {
-        self.makeRoutePickerButtonImpl = makeRoutePickerButton
+        self.makeRoutePickerButtonImpl = { _ in makeRoutePickerButton() }
+    }
+
+    public init(makePlayerRoutePickerButton: @escaping @MainActor (AVPlayer) -> AnyView) {
+        self.makeRoutePickerButtonImpl = makePlayerRoutePickerButton
     }
 
     @MainActor
-    public func routePickerButton() -> AnyView {
-        makeRoutePickerButtonImpl()
+    public func routePickerButton(player: AVPlayer) -> AnyView {
+        makeRoutePickerButtonImpl(player)
     }
 }
 

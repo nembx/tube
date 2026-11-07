@@ -26,6 +26,8 @@ public struct DanmakuSettingsContent: View {
     @AppStorage(DanmakuProxyStore.useProxyKey) private var useProxy: Bool =
         DanmakuProxyStore.useProxyDefault
     @AppStorage(DanmakuProxyStore.proxyURLKey) private var proxyURL: String = ""
+    @AppStorage(DanmakuBlocklist.storageKey) private var blockedKeywordsRaw: String = ""
+    @State private var keywordDraft: String = ""
 
     private let showsAdvancedOptions: Bool
 
@@ -93,6 +95,40 @@ public struct DanmakuSettingsContent: View {
         }
         .disabled(!enableDanmaku)
 
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                TextField("添加屏蔽词", text: $keywordDraft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .autocorrectionDisabled()
+                    .onSubmit(addKeywords)
+                Button("添加", action: addKeywords)
+                    .buttonStyle(.borderless)
+                    .disabled(DanmakuBlocklist(rawValue: keywordDraft).keywords.isEmpty)
+            }
+            if blocklist.keywords.isEmpty {
+                Label("暂无屏蔽词", systemImage: "text.badge.checkmark")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(blocklist.keywords, id: \.self) { keyword in
+                HStack {
+                    Text(keyword)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        blockedKeywordsRaw = blocklist.keywords.filter { $0 != keyword }.joined(separator: "\n")
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("删除屏蔽词：\(keyword)")
+                }
+            }
+        } header: {
+            Text("关键词屏蔽（\(blocklist.keywords.count)）")
+        } footer: {
+            Text("包含任一屏蔽词的弹幕将隐藏，不区分大小写及全角、半角。可粘贴多行，每行一个词，自动去重；添加或删除后立即生效。")
+        }
+
         if showsAdvancedOptions {
             Section {
                 Toggle("使用弹幕代理", isOn: $useProxy)
@@ -111,6 +147,16 @@ public struct DanmakuSettingsContent: View {
                 }
             }
         }
+    }
+
+    private var blocklist: DanmakuBlocklist {
+        DanmakuBlocklist(rawValue: blockedKeywordsRaw)
+    }
+
+    private func addKeywords() {
+        let merged = DanmakuBlocklist(rawValue: blockedKeywordsRaw + "\n" + keywordDraft)
+        blockedKeywordsRaw = merged.rawValue
+        keywordDraft = ""
     }
 
     @ViewBuilder

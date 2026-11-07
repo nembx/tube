@@ -50,6 +50,7 @@ targets:
         UILaunchScreen: {}
         UIBackgroundModes:
           - audio
+        NSLocalNetworkUsageDescription: "投屏时需要在局域网内转发视频，让 AirPlay 接收设备访问当前播放内容。"
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -113,6 +114,7 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSMinimumSystemVersion: "14.0"
+        NSLocalNetworkUsageDescription: "投屏时需要在局域网内转发视频，让 AirPlay 接收设备访问当前播放内容。"
         NSHumanReadableCopyright: "© 2026 nembx. Based on Cezzu © bent2685. MIT License."
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true

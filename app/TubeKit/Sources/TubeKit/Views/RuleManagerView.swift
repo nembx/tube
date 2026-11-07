@@ -20,7 +20,7 @@ public struct RuleManagerView: View {
                 Text("规则源").tag(Tab.sources)
             }
             .pickerStyle(.segmented)
-            .padding()
+            .padding(TubePageLayout.horizontalPadding)
 
             if let message = store.lastError {
                 RuleStoreErrorBanner(message: message) { store.clearLastError() }
@@ -37,6 +37,7 @@ public struct RuleManagerView: View {
                 RuleSourcesView(store: store)
             }
         }
+        .tubePageStyle()
         .navigationTitle("规则")
         .task {
             if store.catalog.isEmpty { await store.refresh() }

@@ -26,6 +26,8 @@ struct TubeMacApp: App {
                     TubeRoot(session: session)
                         .environment(\.playerPresentationController, makePresentationController())
                         .environment(\.playerInteractionController, makeInteractionController())
+                        .environment(\.playerSystemPlaybackController, makeSystemPlaybackController())
+                        .environment(\.regularTopBarPlacement, .inTitleBar)
                 } else {
                     ProgressView("正在启动…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,6 +59,7 @@ struct TubeMacApp: App {
                 .environment(session.history)
                 .environment(\.playerPresentationController, makePresentationController())
                 .environment(\.playerInteractionController, makeInteractionController())
+                .environment(\.playerSystemPlaybackController, makeSystemPlaybackController())
             }
         }
         // 独立播放器窗口不接外部 URL 事件，免得回调把它当成落点新开一个。
@@ -89,5 +92,11 @@ struct TubeMacApp: App {
                 AnyView(PlayerKeyboardInteractionOverlay(actions: actions))
             }
         )
+    }
+
+    private func makeSystemPlaybackController() -> PlayerSystemPlaybackController {
+        PlayerSystemPlaybackController(makePlayerRoutePickerButton: { player in
+            AnyView(PlayerRoutePickerButton(player: player))
+        })
     }
 }

@@ -40,7 +40,7 @@ public struct EpisodeListView: View {
                         .buttonStyle(.plain)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, TubePageLayout.horizontalPadding)
             }
 
             if detail.roads.indices.contains(selectedRoadIndex) {
@@ -71,7 +71,7 @@ public struct EpisodeListView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, TubePageLayout.horizontalPadding)
                 }
 
                 ScrollView {
@@ -100,10 +100,11 @@ public struct EpisodeListView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(20)
+                    .padding(TubePageLayout.horizontalPadding)
                 }
             }
         }
+        .tubePageStyle()
         .navigationTitle(detail.title)
         .onChange(of: selectedRoadIndex) { _, _ in episodePage = 0 }
     }

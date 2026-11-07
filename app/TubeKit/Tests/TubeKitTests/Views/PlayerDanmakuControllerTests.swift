@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import TubeKit
 
-@Suite("PlayerDanmakuController")
+@Suite("PlayerDanmakuController", .serialized)
 struct PlayerDanmakuControllerTests {
     @MainActor
     @Test("prepare reloads same request after danmaku is re-enabled")
@@ -33,6 +33,40 @@ struct PlayerDanmakuControllerTests {
         await controller.prepare(for: request)
         #expect(await provider.fetchCount() == 1)
         #expect(controller.comments.count == 1)
+    }
+
+    @MainActor
+    @Test("屏蔽词立即清理已有弹幕并过滤后续弹幕，删除后再次播放可恢复")
+    func updatesBlockedComments() async throws {
+        resetDanmakuKeys()
+        defer { resetDanmakuKeys() }
+        PlaybackSettings.enableDanmaku = true
+        let suiteName = "PlayerDanmakuControllerTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let provider = FakeDanmakuProvider(result: .success([
+            DanmakuComment(text: "SPOILER 内容", time: 1, type: 1, colorRGB: 16_777_215, source: "test"),
+            DanmakuComment(text: "正常弹幕", time: 1, type: 1, colorRGB: 16_777_215, source: "test"),
+            DanmakuComment(text: "后续 spoiler", time: 2, type: 1, colorRGB: 16_777_215, source: "test"),
+        ]))
+        let controller = PlayerDanmakuController(provider: provider, defaults: defaults)
+        await controller.prepare(for: makeRequest())
+        let viewport = CGSize(width: 800, height: 450)
+        controller.update(currentTime: 1, viewportSize: viewport, playbackRate: 1)
+        #expect(controller.activeComments.count == 2)
+
+        defaults.set("ｓｐｏｉｌｅｒ", forKey: DanmakuBlocklist.storageKey)
+        controller.refreshBlocklist()
+        #expect(controller.activeComments.map(\.comment.text) == ["正常弹幕"])
+        controller.update(currentTime: 2, viewportSize: viewport, playbackRate: 1)
+        #expect(controller.activeComments.map(\.comment.text) == ["正常弹幕"])
+        #expect(controller.comments.count == 3)
+
+        defaults.removeObject(forKey: DanmakuBlocklist.storageKey)
+        controller.update(currentTime: 0, viewportSize: viewport, playbackRate: 1)
+        controller.update(currentTime: 1, viewportSize: viewport, playbackRate: 1)
+        #expect(controller.activeComments.count == 2)
+        #expect(await provider.fetchCount() == 1)
     }
 
     private func makeRequest() -> PlaybackRequest {

@@ -5,6 +5,13 @@ import Testing
 @MainActor
 struct AVPlayerBackendExternalPlaybackTests {
 
+    @Test("播放器允许 AirPlay 外部播放")
+    func allowsExternalPlayback() {
+        let backend = AVPlayerBackend()
+        #expect(backend.player.allowsExternalPlayback)
+        backend.dispose()
+    }
+
     @Test("初始状态不在投屏")
     func initiallyInactive() {
         let backend = AVPlayerBackend()
