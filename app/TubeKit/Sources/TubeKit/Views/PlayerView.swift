@@ -53,6 +53,10 @@ public struct PlayerView: View {
     /// 当前的摆法。跟着可用空间走，顶栏按钮也要按它决定行为。
     @State private var layoutMode: PlayerLayoutMode = .wide
     @State private var isDanmakuSettingsPresented: Bool = false
+    @State private var isEpisodeSettingsPresented = false
+    @State private var episodeSettings = EpisodePlaybackSettings()
+    @State private var episodeAutomation = EpisodePlaybackAutomation()
+    @State private var episodeDidEnd = false
     @State private var scrubbingState = PlayerScrubbingState()
     @State private var scrubPreview = PlayerScrubPreviewController()
     @State private var autoHideTask: Task<Void, Never>?
@@ -113,6 +117,27 @@ public struct PlayerView: View {
                 }
         }
         .background(Color.black)
+        .task(id: activeRequest) {
+            episodeSettings = EpisodePlaybackSettingsStore.load(
+                identity: EpisodePlaybackSettingsStore.identity(for: activeRequest)
+            )
+            episodeAutomation = EpisodePlaybackAutomation()
+            episodeDidEnd = false
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                await updateEpisodeAutomation()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AVPlayerItem.didPlayToEndTimeNotification)) { notification in
+            guard let item = notification.object as? AVPlayerItem,
+                  item === coordinator.backend.player.currentItem else { return }
+            episodeDidEnd = true
+        }
+        .onChange(of: episodeSettings) { _, settings in
+            EpisodePlaybackSettingsStore.save(
+                settings, identity: EpisodePlaybackSettingsStore.identity(for: activeRequest)
+            )
+        }
         // 评论里的图铺满整窗 —— 压在播放器和详情栏之上，mac 上不再是个小 sheet。
         .overlay {
             if let previewImageURL {
@@ -205,6 +230,9 @@ public struct PlayerView: View {
         }
         .onChange(of: coordinator.backend.currentTime) { _, newTime in
             scrubbingState.syncPlaybackTime(newTime)
+            if newTime < coordinator.backend.duration - 1 {
+                episodeDidEnd = false
+            }
         }
         .onChange(of: activeRequest) { _, newRequest in
             prepareDetailModel(for: newRequest)
@@ -229,6 +257,9 @@ public struct PlayerView: View {
         }
         .sheet(isPresented: $isDanmakuSettingsPresented) {
             PlayerDanmakuSettingsSheet()
+        }
+        .sheet(isPresented: $isEpisodeSettingsPresented) {
+            PlayerEpisodeSettingsSheet(settings: $episodeSettings, title: activeRequest.anime.title)
         }
     }
 
@@ -486,6 +517,23 @@ public struct PlayerView: View {
                     .transition(.opacity)
             }
 
+            if let countdown = episodeAutomation.countdown {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(countdown) 秒后播放下一集")
+                        .font(.callout.weight(.semibold))
+                    HStack(spacing: 16) {
+                        Button("取消") { episodeAutomation.cancel() }
+                        Button("立即播放") { playNeighborEpisode(step: 1) }
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(12)
+                .glassBackground(in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 16)
+                .padding(.bottom, usesPhonePortraitChrome ? 60 : 100)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+
             if overlayVisibility.showsTemporaryBoostBadge, let temporaryBoostRate {
                 temporaryBoostBadge(temporaryBoostRate)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -676,6 +724,12 @@ public struct PlayerView: View {
                     // 窄分屏画面小，次要开关全收进「更多」。
                     moreMenuButton(size: size, font: font)
                 } else {
+                    iconControlButton(systemImage: "forward.end", size: size, font: font) {
+                        autoHideTask?.cancel()
+                        controlsVisible = true
+                        isEpisodeSettingsPresented = true
+                    }
+                    .accessibilityLabel("片头片尾与连续播放")
                     superResolutionMenuButton(size: size, font: font)
                     systemPlayback.routePickerButton(player: coordinator.backend.player)
                         .frame(width: size, height: size)
@@ -745,6 +799,7 @@ public struct PlayerView: View {
     @ViewBuilder
     private func moreMenuButton(size: CGFloat, font: Font) -> some View {
         Menu {
+            episodeSettingsButton
             Button {
                 presentDanmakuSettings()
             } label: {
@@ -809,6 +864,7 @@ public struct PlayerView: View {
     private func settingsMenuButton(size: CGFloat, font: Font) -> some View {
         let device = SuperResolutionCapability.defaultDevice
         Menu {
+            episodeSettingsButton
             Button {
                 presentDanmakuSettings()
             } label: {
@@ -1574,6 +1630,40 @@ public struct PlayerView: View {
         revealControlsTemporarily()
     }
 
+    private var episodeSettingsButton: some View {
+        Button {
+            autoHideTask?.cancel()
+            controlsVisible = true
+            isEpisodeSettingsPresented = true
+        } label: {
+            Label("片头片尾与连续播放", systemImage: "forward.end")
+        }
+    }
+
+    private func updateEpisodeAutomation() async {
+        guard coordinator.phase == .playing,
+              !scrubbingState.isActive,
+              !isEpisodeSettingsPresented,
+              !isDanmakuSettingsPresented else { return }
+        let action = episodeAutomation.tick(
+            time: coordinator.backend.currentTime,
+            duration: coordinator.backend.duration,
+            isPlaying: coordinator.backend.isPlaying,
+            isBuffering: coordinator.backend.isBuffering,
+            didEnd: episodeDidEnd,
+            hasNext: activeRequest.hasNextEpisode,
+            settings: episodeSettings
+        )
+        switch action {
+        case .seek(let seconds):
+            await coordinator.seek(to: seconds)
+        case .nextEpisode:
+            playNeighborEpisode(step: 1)
+        case nil:
+            break
+        }
+    }
+
     private func presentDanmakuSettings() {
         autoHideTask?.cancel()
         controlsVisible = true
@@ -1582,6 +1672,8 @@ public struct PlayerView: View {
 
     private func play(request: PlaybackRequest) {
         showResumePrompt = false
+        episodeAutomation = EpisodePlaybackAutomation()
+        episodeDidEnd = false
         activeRequest = request
         Task {
             await coordinator.startPlayback(request, resume: false)

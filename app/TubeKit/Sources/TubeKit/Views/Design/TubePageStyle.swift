@@ -19,6 +19,31 @@ private struct TubePageStyle: ViewModifier {
     }
 }
 
+private struct SettingsToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            configuration.label
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle(isOn: configuration.$isOn) {
+                configuration.label
+            }
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .fixedSize()
+        }
+    }
+}
+
+private struct SettingsLabeledContentStyle: LabeledContentStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            configuration.label
+                .frame(maxWidth: .infinity, alignment: .leading)
+            configuration.content
+        }
+    }
+}
+
 extension View {
     func tubePageStyle() -> some View {
         modifier(TubePageStyle())
@@ -26,6 +51,10 @@ extension View {
 
     func tubeSettingsFormStyle() -> some View {
         formStyle(.grouped)
+            .toggleStyle(SettingsToggleStyle())
+            .labeledContentStyle(SettingsLabeledContentStyle())
+            .labelStyle(.titleOnly)
+            .buttonStyle(.borderless)
             .scrollContentBackground(.hidden)
             .frame(maxWidth: TubePageLayout.settingsMaxWidth)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

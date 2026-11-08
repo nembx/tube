@@ -32,12 +32,16 @@ public struct SettingsView: View {
             }
 
             Section {
-                Picker("主题", selection: $appearance) {
-                    ForEach(AppearanceSettings.Mode.allCases) { mode in
-                        Label(mode.label, systemImage: mode.systemImage).tag(mode.rawValue)
+                LabeledContent("主题") {
+                    Picker("主题", selection: $appearance) {
+                        ForEach(AppearanceSettings.Mode.allCases) { mode in
+                            Text(mode.label).tag(mode.rawValue)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 280)
                 }
-                .pickerStyle(.segmented)
             } header: {
                 Text("外观")
             } footer: {
