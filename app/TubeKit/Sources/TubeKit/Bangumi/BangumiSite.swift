@@ -2,17 +2,25 @@ import Foundation
 
 /// Bangumi 服务站点。默认官方 `bgm.tv`；国内直连经常被挡，可以切到镜像（如 `bangumi.lat`）。
 ///
-/// 一个站点由三个派生地址组成，镜像站按镜像站的规则推导：
+/// 官方与手动添加的镜像按以下规则推导地址，目录镜像使用目录公布的服务域名：
 /// - API：`api.<host>`（官方是 `api.bgm.tv`）；`next.<host>` 的 /p1 接口（热门、短评、
 ///   长评、单集吐槽）镜像站同样代理，实测 next.bangumi.lat 与 next.bgm.tv 返回一致
 /// - 图床：`lain.<host>`（官方是 `lain.bgm.tv`）
 /// - 网页 / OAuth 授权页：`<host>`（官方是 `bgm.tv`）
 public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
+    struct ServiceHosts: Hashable, Sendable, Codable {
+        let api: String
+        let next: String
+        let image: String
+        let web: String
+    }
+
     /// 用来展示与去重的稳定标识，就是 host。
     public let host: String
     public let name: String
     /// 官方站点：OAuth 授权与换 token 只能在这里完成（见 `authorizeURL` / `tokenURL`）。
     public let isOfficial: Bool
+    private let serviceHosts: ServiceHosts?
 
     public var id: String { host }
 
@@ -20,20 +28,26 @@ public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
         self.host = host
         self.name = name
         self.isOfficial = isOfficial
+        self.serviceHosts = nil
+    }
+
+    init(host: String, name: String, serviceHosts: ServiceHosts) {
+        self.host = host
+        self.name = name
+        self.isOfficial = false
+        self.serviceHosts = serviceHosts
     }
 
     public static let official = BangumiSite(host: "bgm.tv", name: "官方（bgm.tv）", isOfficial: true)
-    /// 国内可直连的完整镜像：API / 图床 / 网页都有对应子域。
+    /// 保留旧版本已选中的内置镜像。
     public static let mirrorLat = BangumiSite(host: "bangumi.lat", name: "bangumi.lat 镜像")
 
-    public static var presets: [BangumiSite] { [official, mirrorLat] }
-
-    public var apiDomain: URL { URL(string: "https://api.\(host)")! }
+    public var apiDomain: URL { URL(string: "https://\(serviceHosts?.api ?? "api.\(host)")")! }
     /// /p1 接口。镜像站也代理它（2026-10 实测 next.bangumi.lat 的热门、短评、长评、
     /// 单集吐槽与官方逐字节一致），所以不再只给官方。
-    public var nextDomain: URL { URL(string: "https://next.\(host)")! }
-    public var webDomain: URL { URL(string: "https://\(host)")! }
-    public var imageDomain: URL { URL(string: "https://lain.\(host)")! }
+    public var nextDomain: URL { URL(string: "https://\(serviceHosts?.next ?? "next.\(host)")")! }
+    public var webDomain: URL { URL(string: "https://\(serviceHosts?.web ?? host)")! }
+    public var imageDomain: URL { URL(string: "https://\(serviceHosts?.image ?? "lain.\(host)")")! }
 
     /// 授权页固定走官方 bgm.tv。
     ///
@@ -82,6 +96,7 @@ public struct BangumiSite: Hashable, Sendable, Identifiable, Codable {
 public enum BangumiSiteSettings {
     public static let selectedHostKey = "tube.bangumi.siteHost"
     public static let customSitesKey = "tube.bangumi.customSites"
+    private static let mirrorSitesKey = "tube.bangumi.mirrorSites"
 
     public static func selectedSite(from defaults: UserDefaults = .standard) -> BangumiSite {
         let host = defaults.string(forKey: selectedHostKey) ?? ""
@@ -89,18 +104,30 @@ public enum BangumiSiteSettings {
         return allSites(from: defaults).first { $0.host == host } ?? .official
     }
 
-    /// 内置站 + 用户添加的站，去重，官方永远排第一。
+    /// 官方、目录镜像、手动镜像。同域名优先保留手动配置。
     public static func allSites(from defaults: UserDefaults = .standard) -> [BangumiSite] {
+        let customSites = customSites(from: defaults)
+        let customHosts = Set(customSites.map(\.host))
+        let mirrorSites = storedSites(forKey: mirrorSitesKey, from: defaults)
+            .filter { !customHosts.contains($0.host) }
+        let legacy = BangumiSite.mirrorLat
+        let legacySites = defaults.string(forKey: selectedHostKey) == legacy.host ? [legacy] : []
         var seen = Set<String>()
-        var result: [BangumiSite] = []
-        for site in BangumiSite.presets + customSites(from: defaults) where seen.insert(site.host).inserted {
-            result.append(site)
+        return ([BangumiSite.official] + mirrorSites + customSites + legacySites).filter {
+            seen.insert($0.host).inserted
         }
-        return result
+    }
+
+    static func storeMirrorSites(_ sites: [BangumiSite], defaults: UserDefaults = .standard) throws {
+        defaults.set(try JSONEncoder().encode(sites), forKey: mirrorSitesKey)
     }
 
     public static func customSites(from defaults: UserDefaults = .standard) -> [BangumiSite] {
-        guard let data = defaults.data(forKey: customSitesKey),
+        storedSites(forKey: customSitesKey, from: defaults)
+    }
+
+    private static func storedSites(forKey key: String, from defaults: UserDefaults) -> [BangumiSite] {
+        guard let data = defaults.data(forKey: key),
             let sites = try? JSONDecoder().decode([BangumiSite].self, from: data)
         else {
             return []

@@ -52,21 +52,68 @@ struct BangumiSiteSettingsTests {
     func settings() {
         let defaults = makeDefaults()
         #expect(BangumiSiteSettings.selectedSite(from: defaults) == .official)
-        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv", "bangumi.lat"])
+        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv"])
 
-        BangumiSiteSettings.select(.mirrorLat, defaults: defaults)
+        defaults.set("bangumi.lat", forKey: BangumiSiteSettings.selectedHostKey)
         #expect(BangumiSiteSettings.selectedSite(from: defaults) == .mirrorLat)
+        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv", "bangumi.lat"])
 
         let added = BangumiSiteSettings.addCustomSite("https://mirror.example.com", defaults: defaults)
         #expect(added?.host == "mirror.example.com")
         #expect(BangumiSiteSettings.addCustomSite("mirror.example.com", defaults: defaults) == nil)
-        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv", "bangumi.lat", "mirror.example.com"])
+        #expect(BangumiSiteSettings.allSites(from: defaults).contains { $0.host == "mirror.example.com" })
 
         // 选中自定义站，再删除它时回到官方
         BangumiSiteSettings.select(BangumiSite(host: "mirror.example.com", name: "mirror"), defaults: defaults)
         BangumiSiteSettings.removeCustomSite(host: "mirror.example.com", defaults: defaults)
         #expect(BangumiSiteSettings.selectedSite(from: defaults) == .official)
-        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv", "bangumi.lat"])
+        #expect(BangumiSiteSettings.allSites(from: defaults).map(\.host) == ["bgm.tv"])
+    }
+
+    @Test("directory uses advertised hosts and skips frontend-only sites")
+    func directory() throws {
+        let json = """
+            {"mirrors":[
+              {"name":"bgm.lat","url":"https://www.bgm.lat","base":"bgm.lat","services":[
+                {"id":"main","hosts":["bgm.lat","www.bgm.lat"]},
+                {"id":"next","hosts":["next.bgm.lat"]},
+                {"id":"api","hosts":["bad/host","api.bgm.lat"]},
+                {"id":"lain","hosts":["images.bgm.lat"]}
+              ]},
+              {"name":"fxbgm.tv","url":"https://fxbgm.tv","base":"fxbgm.tv","services":[
+                {"id":"main","hosts":["fxbgm.tv"]}
+              ]}
+            ]}
+            """
+        let sites = try BangumiMirrorDirectory.sites(from: Data(json.utf8))
+        #expect(sites.map(\.host) == ["bgm.lat"])
+        let site = try #require(sites.first)
+        #expect(site.apiDomain.host == "api.bgm.lat")
+        #expect(site.nextDomain.host == "next.bgm.lat")
+        #expect(site.imageDomain.host == "images.bgm.lat")
+        #expect(site.webDomain.host == "www.bgm.lat")
+
+        let defaults = makeDefaults()
+        try BangumiSiteSettings.storeMirrorSites(sites, defaults: defaults)
+        #expect(BangumiSiteSettings.allSites(from: defaults) == [.official, site])
+        BangumiSiteSettings.select(site, defaults: defaults)
+        #expect(BangumiSiteSettings.selectedSite(from: defaults) == site)
+        #expect(BangumiSiteSettings.addCustomSite("bgm.lat", defaults: defaults) == nil)
+    }
+
+    @Test("refreshing the directory preserves existing custom mirrors")
+    func customMirrorSurvivesRefresh() throws {
+        let defaults = makeDefaults()
+        let custom = try #require(BangumiSiteSettings.addCustomSite("mirror.example.com", defaults: defaults))
+        let mirror = BangumiSite(host: custom.host, name: "目录镜像")
+        BangumiSiteSettings.select(custom, defaults: defaults)
+        try BangumiSiteSettings.storeMirrorSites([mirror], defaults: defaults)
+        #expect(BangumiSiteSettings.allSites(from: defaults) == [.official, custom])
+        #expect(BangumiSiteSettings.selectedSite(from: defaults) == custom)
+
+        BangumiSiteSettings.removeCustomSite(host: custom.host, defaults: defaults)
+        #expect(BangumiSiteSettings.allSites(from: defaults) == [.official, mirror])
+        #expect(BangumiSiteSettings.selectedSite(from: defaults) == .official)
     }
 
     @Test("oauth config derives endpoints from the site")

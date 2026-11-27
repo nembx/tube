@@ -2,22 +2,24 @@ import SwiftUI
 
 /// 设置页的「Bangumi 服务」：选择官方站点或镜像站，解决国内直连 bgm.tv 不稳的问题。
 ///
-/// 影响范围：搜索 / 首页 / 详情（API）、封面（图床）、登录页与换 token（OAuth）。
-/// 默认官方 `bgm.tv`；内置 `bangumi.lat` 镜像，也可以添加自建镜像（同一套子域规则：
-/// `api.<host>` / `lain.<host>` / `<host>`）。
+/// 影响搜索、首页、详情与封面，OAuth 固定使用官方站点。
+/// 默认官方 `bgm.tv`，目录镜像通过手动刷新缓存，也可以添加自建镜像。
 ///
 /// 图片另有独立开关：`auto`（跟随站点，默认）/ `off`（直连）/ 具体代理地址。
 struct BangumiSiteSettingsView: View {
     @State private var selected: BangumiSite = BangumiSiteSettings.selectedSite()
-    @State private var customSites: [BangumiSite] = BangumiSiteSettings.customSites()
+    @State private var sites: [BangumiSite] = BangumiSiteSettings.allSites()
     @State private var newSite: String = ""
     @State private var addError: String?
+    @State private var isRefreshing = false
+    @State private var mirrorRefreshFailed = false
     @AppStorage(BangumiImageMirrorSettings.mirrorKey) private var imageMirror: String =
         BangumiImageMirrorSettings.mirrorDefault
 
     var body: some View {
+        let customHosts = Set(BangumiSiteSettings.customSites().map(\.host))
         Section {
-            ForEach(BangumiSite.presets + customSites) { site in
+            ForEach(sites) { site in
                 Button {
                     select(site)
                 } label: {
@@ -27,15 +29,13 @@ struct BangumiSiteSettingsView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(site.name)
                                 .foregroundStyle(.primary)
-                            Text("api.\(site.host) · lain.\(site.host)")
+                            Text("\(site.apiDomain.host ?? "") · \(site.imageDomain.host ?? "")")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
 
-                        // 内置站点（官方 / bangumi.lat）不可删；自定义镜像给一个明确的删除按钮
-                        // —— Form 里 swipeActions 在 macOS 上不生效，必须有可见入口。
-                        if !BangumiSite.presets.contains(site) {
+                        if customHosts.contains(site.host) {
                             Button {
                                 remove(site)
                             } label: {
@@ -49,6 +49,24 @@ struct BangumiSiteSettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            }
+
+            Button {
+                Task { await refreshMirrors() }
+            } label: {
+                HStack {
+                    Text("刷新镜像")
+                    if isRefreshing {
+                        Spacer()
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            }
+            .disabled(isRefreshing)
+            if mirrorRefreshFailed {
+                Text("镜像列表刷新失败，已保留本地缓存。")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
             }
 
             HStack {
@@ -71,7 +89,7 @@ struct BangumiSiteSettingsView: View {
             Text("Bangumi 服务")
         } footer: {
             Text(
-                "默认使用官方 bgm.tv。国内直连不稳时可以切到 bangumi.lat 镜像，或添加自建镜像。镜像需要同时提供 api.<域名>、lain.<域名> 与网页登录页；切换后会重新加载 Bangumi 数据，已登录状态保留。"
+                "默认使用官方 bgm.tv。点击「刷新镜像」获取并缓存镜像列表，也可以添加自建镜像。切换站点后会重新加载 Bangumi 数据，已登录状态保留。"
             )
         }
 
@@ -87,7 +105,7 @@ struct BangumiSiteSettingsView: View {
         } header: {
             Text("封面图片")
         } footer: {
-            Text("「跟随服务站点」时：官方站点直连 lain.bgm.tv；镜像站点改用 lain.<镜像域名>。仍读不到封面可以改用 wsrv.nl 或「播放代理」。")
+            Text("「跟随服务站点」时，封面使用所选站点的图床。仍读不到封面可以改用 wsrv.nl 或「播放代理」。")
         }
         .onChange(of: imageMirror) { _, _ in
             Task { await RemoteImageCache.shared.removeAll() }
@@ -107,27 +125,48 @@ struct BangumiSiteSettingsView: View {
         guard site.host != selected.host else { return }
         BangumiSiteSettings.select(site)
         selected = site
+        sites = BangumiSiteSettings.allSites()
         reloadBangumiStores()
+    }
+
+    private func refreshMirrors() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        mirrorRefreshFailed = false
+        defer { isRefreshing = false }
+
+        do {
+            let mirrors = try await BangumiMirrorDirectory.fetch()
+            let previous = BangumiSiteSettings.selectedSite()
+            try BangumiSiteSettings.storeMirrorSites(mirrors)
+            sites = BangumiSiteSettings.allSites()
+            selected = BangumiSiteSettings.selectedSite()
+            if selected != previous {
+                BangumiSiteSettings.select(selected)
+                reloadBangumiStores()
+            }
+        } catch {
+            mirrorRefreshFailed = true
+        }
     }
 
     private func add() {
         addError = nil
-        guard let site = BangumiSite.parse(newSite) else {
+        guard BangumiSite.parse(newSite) != nil else {
             addError = "请输入一个合法域名，例如 mirror.example.com。"
             return
         }
-        guard BangumiSiteSettings.addCustomSite(newSite) != nil else {
+        guard let site = BangumiSiteSettings.addCustomSite(newSite) else {
             addError = "该站点已在列表中。"
             return
         }
-        customSites = BangumiSiteSettings.customSites()
         newSite = ""
         select(site)
     }
 
     private func remove(_ site: BangumiSite) {
         BangumiSiteSettings.removeCustomSite(host: site.host)
-        customSites = BangumiSiteSettings.customSites()
+        sites = BangumiSiteSettings.allSites()
         if selected.host == site.host {
             selected = BangumiSiteSettings.selectedSite()
             reloadBangumiStores()
